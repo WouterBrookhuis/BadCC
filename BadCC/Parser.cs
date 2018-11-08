@@ -139,22 +139,24 @@ namespace BadCC
 
         private ExpressionNode ParseExpression(Queue<Token> tokens)
         {
-            // Assignment expression
+            // Assignment or variable expression
             if(tokens.Peek() is IdentifierToken idToken)
             {
-                tokens.Dequeue();
-
-                // = token
-                var token = tokens.Dequeue();
-                if( !(token is FixedToken equalsToken && equalsToken.TokenKind == FixedToken.Kind.Assignment))
+                // = token?
+                var token = tokens.ElementAt(1);
+                if(token is FixedToken equalsToken && equalsToken.TokenKind == FixedToken.Kind.Assignment)
                 {
-                    throw new UnexpectedTokenException("Expected = token", token);
+                    // Assignment expression, remove both tokens
+                    tokens.Dequeue();
+                    tokens.Dequeue();
+
+                    // Expression
+                    var expression = ParseExpression(tokens);
+
+                    return new AssignmentNode(idToken.Name, expression);
                 }
 
-                // Expression
-                var expression = ParseExpression(tokens);
-
-                return new AssignmentNode(idToken.Name, expression);
+                // Variable expression probably, fall trough
             }
 
             // Or expression
@@ -304,6 +306,11 @@ namespace BadCC
                         return expression;
                     }
                 }
+            }
+            else if(token is IdentifierToken idToken)
+            {
+                // Variable reference
+                return new VariableNode(idToken.Name);
             }
 
             throw new UnexpectedTokenException("Did not get a valid start of expression token", token);

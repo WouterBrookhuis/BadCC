@@ -50,5 +50,5 @@ def run_stage_tests(stage_nr):
 #run_stage_tests(1)
 #run_stage_tests(2)
 #run_stage_tests(3)
-run_stage_tests(4)
-#run_stage_tests(5)
+#run_stage_tests(4)
+run_stage_tests(5)

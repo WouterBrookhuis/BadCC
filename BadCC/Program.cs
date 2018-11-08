@@ -20,8 +20,6 @@ namespace BadCC
                 {
                     fileName = Path.GetFullPath(fileName);
                     var extension = Path.GetExtension(fileName);
-                    Console.WriteLine(extension);
-                    Console.WriteLine(fileName);
                     fileName = fileName.Substring(0, fileName.Length - extension.Length);
                 }
             }
@@ -57,21 +55,23 @@ namespace BadCC
 
                     using(var writer = new StreamWriter(outPath))
                     {
-                        var generator = new Generator();
-                        generator.GenerateProgram(program, writer);
+                        var generator = new Generator(writer);
+                        generator.GenerateProgram(program);
                     }
-
-
                 }
             }
-            catch(StackOverflowException e)
+            // Catch and log exceptions when running tests
+            catch(Exception e) when (args.Length == 1)
             {
                 Console.WriteLine(e.ToString());
 
                 errorcode = 1;
             }
 
-            //Console.ReadKey();
+            if(args.Length == 0)
+            {
+                Console.ReadKey();
+            }
 
             return errorcode;
         }

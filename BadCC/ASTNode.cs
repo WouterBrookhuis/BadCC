@@ -243,6 +243,16 @@ namespace BadCC
         }
     }
 
+    class VariableNode : ExpressionNode
+    {
+        public string Name { get; private set; }
+
+        public VariableNode(string name)
+        {
+            Name = name;
+        }
+    }
+
     class ConstantNode : ExpressionNode
     {
         public int Value { get; private set; }

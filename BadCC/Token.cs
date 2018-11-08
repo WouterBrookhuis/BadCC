@@ -117,7 +117,7 @@ namespace BadCC
                 }
                 var str = kv.Value;
                 // ESCAPE return with return\b !!
-                // TODO: Have less nasty hack
+                // TODO: Have less nasty methods? idk, this works
                 str = System.Text.RegularExpressions.Regex.Escape(str);
                 if(str.Length > 1 && char.IsLetterOrDigit(str.Last()))
                 {
