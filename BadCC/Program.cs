@@ -64,12 +64,14 @@ namespace BadCC
 
                 }
             }
-            catch(Exception e)
+            catch(StackOverflowException e)
             {
                 Console.WriteLine(e.ToString());
 
                 errorcode = 1;
             }
+
+            //Console.ReadKey();
 
             return errorcode;
         }

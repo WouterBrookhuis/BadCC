@@ -115,7 +115,16 @@ namespace BadCC
                 {
                     sb.Append("|");
                 }
-                sb.Append(System.Text.RegularExpressions.Regex.Escape(kv.Value));
+                var str = kv.Value;
+                // ESCAPE return with return\b !!
+                // TODO: Have less nasty hack
+                str = System.Text.RegularExpressions.Regex.Escape(str);
+                if(str.Length > 1 && char.IsLetterOrDigit(str.Last()))
+                {
+                    str += @"\b";
+                }
+                Console.WriteLine("{0} {1}", kv.Value, str);
+                sb.Append(str);
             }
             return sb.ToString();
         }
