@@ -53,11 +53,11 @@ namespace BadCC
 
             // Parse statements until we find a closing bracket after one
             var statements = new List<StatementNode>();
-            do
+            while(!(tokens.Peek() is FixedToken potentialBracket && potentialBracket.TokenKind == FixedToken.Kind.BracketClose))
             {
                 var statement = ParseStatement(tokens);
                 statements.Add(statement);
-            } while( !(tokens.Peek() is FixedToken potentialBracket && potentialBracket.TokenKind == FixedToken.Kind.BracketClose));
+            };
             
             // Eat the closing bracket
             brackToken = tokens.Dequeue() as FixedToken;
@@ -65,6 +65,14 @@ namespace BadCC
             {
                 throw new UnexpectedTokenException("Did not get } token", brackToken);
             }
+
+            // Check if we are missing a return statement. If so add a return 0;
+            // TODO: Update this to handle void and other return types when we get to it
+            if(statements.Count == 0 || !(statements[statements.Count - 1] is ReturnNode))
+            {
+                statements.Add(new ReturnNode(new ConstantNode(0)));
+            }
+
 
             return new FunctionNode(nameToken.Name, statements);
         }
