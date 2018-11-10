@@ -10,9 +10,67 @@ namespace BadCC
 {
     class Generator
     {
+        private class LocalVariableMap
+        {
+            private HashSet<string> newlyDeclaredVars;
+            private int newlyDeclaredByteSize;
+            private ImmutableDictionary<string, int> map;
+            private int offset;
+
+            /// <summary>
+            /// The size of this map's own new scope variables in bytes
+            /// </summary>
+            public int ScopeByteSize => newlyDeclaredByteSize;
+
+            public LocalVariableMap(LocalVariableMap template)
+            {
+                map = template.map; // We can do this since map is immutable, e.g. if we 'change it' we'll just get a copy and the original one remains the same
+                offset = template.offset;
+                newlyDeclaredVars = new HashSet<string>();  // Needs to be new
+            }
+
+            public LocalVariableMap()
+            {
+                var builder = ImmutableDictionary.CreateBuilder<string, int>();
+                map = builder.ToImmutable();
+                offset = -4;
+                newlyDeclaredVars = new HashSet<string>();
+            }
+
+            public bool ContainsVariable(string name)
+            {
+                return map.ContainsKey(name);
+            }
+
+            public bool DeclaredVariable(string name)
+            {
+                return newlyDeclaredVars.Contains(name);
+            }
+
+            public int GetOffset(string name)
+            {
+                return map[name];
+            }
+
+            public bool TryGetOffset(string name, out int offset)
+            {
+                return map.TryGetValue(name, out offset);
+            }
+
+            public int AddInt(string name)
+            {
+                newlyDeclaredVars.Add(name);
+                map = map.SetItem(name, offset);
+                offset -= 4;
+                newlyDeclaredByteSize += 4;
+                return offset;
+            }
+        }
+
+        private LocalVariableMap CurrentVariableMap { get { return localVariableMaps.Peek(); } }
+
         private StreamWriter writer;
-        private ImmutableDictionary<string, int> localVariableMap;
-        private int localVariableOffset;
+        private Stack<LocalVariableMap> localVariableMaps;
 
         private int labelCounter;
         private FunctionNode currentFunction;
@@ -22,9 +80,7 @@ namespace BadCC
         public Generator(StreamWriter writer)
         {
             this.writer = writer;
-            var builder = ImmutableDictionary.CreateBuilder<string, int>();
-            localVariableMap = builder.ToImmutable();
-            localVariableOffset = -4;   // One after saved EPB
+            localVariableMaps = new Stack<LocalVariableMap>();
         }
 
         public void GenerateProgram(ProgramNode program)
@@ -36,13 +92,14 @@ namespace BadCC
         {
             currentFunction = function;
             labelCounter = 0;
-
             writer.WriteLine(".globl _{0}", function.Name);
             writer.WriteLine("_{0}:", function.Name);
-            foreach(var blockItem in function.BlockItems)
-            {
-                GenerateBlockItem(blockItem);
-            }
+
+            localVariableMaps.Push(new LocalVariableMap());
+
+            // A function body is just a block so let GenerateStatement handle it
+            var tmpBlockNode = new BlockStatementNode(function.BlockItems);
+            GenerateStatement(tmpBlockNode);
 
             currentFunction = null;
         }
@@ -52,7 +109,7 @@ namespace BadCC
             if(blockItem is DeclareNode declareNode)
             {
                 // Variable declaration
-                if(localVariableMap.ContainsKey(declareNode.Name))
+                if(CurrentVariableMap.DeclaredVariable(declareNode.Name))
                 {
                     throw new GeneratorException("Duplicate variable declaration!", blockItem);
                 }
@@ -70,8 +127,7 @@ namespace BadCC
                 writer.WriteLine("push    %eax");
 
                 // Keep track of where it is
-                localVariableMap = localVariableMap.Add(declareNode.Name, localVariableOffset);
-                localVariableOffset -= 4;
+                CurrentVariableMap.AddInt(declareNode.Name);
             }
             else if(blockItem is StatementNode statement)
             {
@@ -130,6 +186,21 @@ namespace BadCC
                 }
                 writer.WriteLine("{0}:", endOfElseLabel);               // Put in end of else label last
 
+            }
+            // Block statements
+            else if(statement is BlockStatementNode block)
+            {
+                // Entering a block means we need a new local variable map
+                localVariableMaps.Push(new LocalVariableMap(CurrentVariableMap));
+                // Process all block items
+                foreach(var item in block.BlockItems)
+                {
+                    GenerateBlockItem(item);
+                }
+                // Exiting the block means we should ditch the variable map
+                var scopeMap = localVariableMaps.Pop();
+                // Clean up stack
+                writer.WriteLine("addl    ${0}, %esp", scopeMap.ScopeByteSize); // Move the stack pointer 'back' (up) to where it was before entering this block
             }
             else
             {
@@ -297,7 +368,7 @@ namespace BadCC
             else if(expression is AssignmentNode assignmentNode)
             {
                 // Variable assignment
-                if(localVariableMap.TryGetValue(assignmentNode.Name, out int variableOffset))
+                if(CurrentVariableMap.TryGetOffset(assignmentNode.Name, out int variableOffset))
                 {
                     writer.WriteLine("movl    %eax, {0}(%ebp)", variableOffset);    // Store eax in memory at ebp + variableOffset
                 }
@@ -309,7 +380,7 @@ namespace BadCC
             else if(expression is VariableNode variableNode)
             {
                 // Reference to a variable
-                if(localVariableMap.TryGetValue(variableNode.Name, out int variableOffset))
+                if(CurrentVariableMap.TryGetOffset(variableNode.Name, out int variableOffset))
                 {
                     writer.WriteLine("movl    {0}(%ebp), %eax", variableOffset);    // eax = mem(ebp + variableOffset)
                 }

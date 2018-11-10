@@ -127,6 +127,26 @@ namespace BadCC
         }
     }
 
+    class BlockStatementNode : StatementNode
+    {
+        public IReadOnlyList<BlockItemNode> BlockItems { get; private set; }
+
+        public BlockStatementNode(IReadOnlyList<BlockItemNode> blockItems)
+        {
+            BlockItems = blockItems;
+        }
+
+        public override string ToString(int indentLevel)
+        {
+            var str = base.ToString(indentLevel);
+            foreach(var blockItem in BlockItems)
+            {
+                str += "\r\n" + blockItem.ToString(indentLevel + 1);
+            }
+            return str;
+        }
+    }
+
     class ExpressionStatementNode : StatementNode
     {
         public ExpressionNode Expression { get; private set; }

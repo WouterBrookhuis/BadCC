@@ -59,6 +59,10 @@ namespace BadCC
         public ProgramNode ParseProgram(Queue<Token> tokens)
         {
             var function = ParseFunction(tokens);
+            if(tokens.Count > 0)
+            {
+                throw new UnexpectedTokenException("Reached end of program but found a token", tokens.Peek());
+            }
             return new ProgramNode(function);
         }
 
@@ -160,6 +164,19 @@ namespace BadCC
                 }
 
                 return new IfStatmentNode(conditional, trueStatement, falseStatement);
+            }
+            // Block statement
+            else if(TryTakeFixedToken(tokens, FixedToken.Kind.BracketOpen))
+            {
+                // Parse statements until we find (and take!) a closing bracket after one
+                var blockItems = new List<BlockItemNode>();
+                while(!TryTakeFixedToken(tokens, FixedToken.Kind.BracketClose))
+                {
+                    var statement = ParseBlockItem(tokens);
+                    blockItems.Add(statement);
+                };
+
+                return new BlockStatementNode(blockItems);
             }
 
             // Try to parse an expression statement, if it isn't valid it will crash here

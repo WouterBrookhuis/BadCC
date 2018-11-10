@@ -57,13 +57,14 @@ def run_stage_tests(stage_nr, variant = None):
     glb_good_tests += good_tests
     glb_total_tests += total_tests
 
-#run_stage_tests(1)
-#run_stage_tests(2)
-#run_stage_tests(3)
-#run_stage_tests(4)
-#run_stage_tests(5)
+run_stage_tests(1)
+run_stage_tests(2)
+run_stage_tests(3)
+run_stage_tests(4)
+run_stage_tests(5)
 run_stage_tests(6, "expression")
 run_stage_tests(6, "statement")
+run_stage_tests(7)
 
 if glb_good_tests == glb_total_tests:
     print("PASSED:", glb_good_tests, "/", glb_total_tests, "tests succeeded")
