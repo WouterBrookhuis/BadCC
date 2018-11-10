@@ -8,6 +8,54 @@ namespace BadCC
 {
     class Parser
     {
+        /// <summary>
+        /// Takes a fixed token from the queue, throws an exception if it can't.
+        /// </summary>
+        /// <param name="tokens">The token queue</param>
+        /// <param name="kind">The kind of token to dequeue</param>
+        /// <exception cref="UnexpectedTokenException">Thrown when the given token kind is not first in the queue</exception>
+        private void TakeFixedToken(Queue<Token> tokens, FixedToken.Kind kind)
+        {
+            var typeToken = tokens.Dequeue() as FixedToken;
+            if(typeToken == null || typeToken.TokenKind != kind)
+            {
+                throw new UnexpectedTokenException("Did not get token of kind " + kind.ToString(), typeToken);
+            }
+        }
+
+        /// <summary>
+        /// Tries to take a fixed token from the queue and returns if it could. Does not change the queue if the given token kind is not on top.
+        /// </summary>
+        /// <param name="tokens">Queue of tokens</param>
+        /// <param name="kind">The kind of token we want to dequeue</param>
+        /// <returns>True if the token was dequeued, false if it wasn't</returns>
+        private bool TryTakeFixedToken(Queue<Token> tokens, FixedToken.Kind kind)
+        {
+            var typeToken = tokens.Peek() as FixedToken;
+            if(typeToken == null || typeToken.TokenKind != kind)
+            {
+                return false;
+            }
+            tokens.Dequeue();
+            return true;
+        }
+
+        /// <summary>
+        /// Takes an identifier token from the queue, throws exception if it can't.
+        /// </summary>
+        /// <param name="tokens">The queue of tokens</param>
+        /// <returns>IdentifierToken that was dequeued</returns>
+        /// <exception cref="UnexpectedTokenException">Thrown if the first token in the queue is not an IdentifierToken</exception>
+        private IdentifierToken TakeIdentifierToken(Queue<Token> tokens)
+        {
+            var token = tokens.Dequeue() as IdentifierToken;
+            if(token == null)
+            {
+                throw new UnexpectedTokenException("Did not get IdentifierToken", token);
+            }
+            return token;
+        }
+
         public ProgramNode ParseProgram(Queue<Token> tokens)
         {
             var function = ParseFunction(tokens);
@@ -24,124 +72,101 @@ namespace BadCC
             }
 
             // Identifier of the function
-            var nameToken = tokens.Dequeue() as IdentifierToken;
-            if(nameToken == null)
-            {
-                throw new UnexpectedTokenException("Did not get ID token", nameToken);
-            }
+            var nameToken = TakeIdentifierToken(tokens);
 
             // Opening parenthesis
-            var parToken = tokens.Dequeue() as FixedToken;
-            if(parToken == null || parToken.TokenKind != FixedToken.Kind.ParOpen)
-            {
-                throw new UnexpectedTokenException("Did not get ( token", parToken);
-            }
+            TakeFixedToken(tokens, FixedToken.Kind.ParOpen);
 
             // Closing parenthesis
-            parToken = tokens.Dequeue() as FixedToken;
-            if(parToken == null || parToken.TokenKind != FixedToken.Kind.ParClose)
-            {
-                throw new UnexpectedTokenException("Did not get ) token", parToken);
-            }
+            TakeFixedToken(tokens, FixedToken.Kind.ParClose);
 
             // Opening bracket
-            var brackToken = tokens.Dequeue() as FixedToken;
-            if(brackToken == null || brackToken.TokenKind != FixedToken.Kind.BracketOpen)
-            {
-                throw new UnexpectedTokenException("Did not get { token", brackToken);
-            }
+            TakeFixedToken(tokens, FixedToken.Kind.BracketOpen);
 
-            // Parse statements until we find a closing bracket after one
-            var statements = new List<StatementNode>();
-            while(!(tokens.Peek() is FixedToken potentialBracket && potentialBracket.TokenKind == FixedToken.Kind.BracketClose))
+            // Parse statements until we find (and take!) a closing bracket after one
+            var blockItems = new List<BlockItemNode>();
+            while(!TryTakeFixedToken(tokens, FixedToken.Kind.BracketClose))
             {
-                var statement = ParseStatement(tokens);
-                statements.Add(statement);
+                var statement = ParseBlockItem(tokens);
+                blockItems.Add(statement);
             };
-            
-            // Eat the closing bracket
-            brackToken = tokens.Dequeue() as FixedToken;
-            if(brackToken == null || brackToken.TokenKind != FixedToken.Kind.BracketClose)
-            {
-                throw new UnexpectedTokenException("Did not get } token", brackToken);
-            }
+
 
             // Check if we are missing a return statement. If so add a return 0;
             // TODO: Update this to handle void and other return types when we get to it
-            if(statements.Count == 0 || !(statements[statements.Count - 1] is ReturnNode))
+            if(blockItems.Count == 0 || !(blockItems[blockItems.Count - 1] is ReturnNode))
             {
-                statements.Add(new ReturnNode(new ConstantNode(0)));
+                blockItems.Add(new ReturnNode(new ConstantNode(0)));
             }
 
 
-            return new FunctionNode(nameToken.Name, statements);
+            return new FunctionNode(nameToken.Name, blockItems);
+        }
+
+        private BlockItemNode ParseBlockItem(Queue<Token> tokens)
+        {
+            // Integer variable declaration
+            if(TryTakeFixedToken(tokens, FixedToken.Kind.Int))
+            {
+                // Name of the variable
+                var idToken = TakeIdentifierToken(tokens);
+
+                // Check for assignment (=) to see if there is an expression here
+                ExpressionNode expression = null;
+                if(TryTakeFixedToken(tokens, FixedToken.Kind.Assignment))
+                {
+                    // The initialization expression
+                    expression = ParseExpression(tokens);
+                }
+
+                // Semi colon
+                TakeFixedToken(tokens, FixedToken.Kind.SemiColon);
+
+                return new DeclareNode(idToken.Name, expression);
+            }
+
+            // It's a statement
+            return ParseStatement(tokens);
         }
 
         private StatementNode ParseStatement(Queue<Token> tokens)
         {
-            // PEEK The next token, don't take it yet!
-            var token = tokens.Peek();
-
-            if(token is FixedToken fixedToken)
+            // Return statement
+            if(TryTakeFixedToken(tokens, FixedToken.Kind.Return))
             {
-                // Return statement
-                if(fixedToken.TokenKind == FixedToken.Kind.Return)
+                // Expression to return
+                var expression = ParseExpression(tokens);
+
+                // Semi colon
+                TakeFixedToken(tokens, FixedToken.Kind.SemiColon);
+
+                return new ReturnNode(expression);
+            }
+            // If statement
+            else if(TryTakeFixedToken(tokens, FixedToken.Kind.If))
+            {
+                // ( expr )
+                TakeFixedToken(tokens, FixedToken.Kind.ParOpen);
+                var conditional = ParseExpression(tokens);
+                TakeFixedToken(tokens, FixedToken.Kind.ParClose);
+
+                // True statement
+                var trueStatement = ParseStatement(tokens);
+
+                // Optional else + statement
+                StatementNode falseStatement = null;
+                if(TryTakeFixedToken(tokens, FixedToken.Kind.Else))
                 {
-                    tokens.Dequeue();
-
-                    // Expression to return
-                    var expression = ParseExpression(tokens);
-
-                    // Semi colon
-                    var semiToken = tokens.Dequeue() as FixedToken;
-                    if(semiToken == null || semiToken.TokenKind != FixedToken.Kind.SemiColon)
-                    {
-                        throw new UnexpectedTokenException("Did not get ; token", semiToken);
-                    }
-
-                    return new ReturnNode(expression);
+                    falseStatement = ParseStatement(tokens);
                 }
-                // Integer variable declaration
-                else if(fixedToken.TokenKind == FixedToken.Kind.Int)
-                {
-                    tokens.Dequeue();
 
-                    // Name of the variable
-                    var idToken = tokens.Dequeue() as IdentifierToken;
-                    if(idToken == null)
-                    {
-                        throw new UnexpectedTokenException("Did not get an identifier token", idToken);
-                    }
-
-                    // Check for assignment (=) to see if there is an expression here
-                    ExpressionNode expression = null;
-                    if(tokens.Peek() is FixedToken assignToken && assignToken.TokenKind == FixedToken.Kind.Assignment)
-                    {
-                        tokens.Dequeue();
-
-                        // The initialization expression
-                        expression = ParseExpression(tokens);
-                    }
-
-                    // Semi colon
-                    var semiToken2 = tokens.Dequeue() as FixedToken;
-                    if(semiToken2 == null || semiToken2.TokenKind != FixedToken.Kind.SemiColon)
-                    {
-                        throw new UnexpectedTokenException("Did not get ; token", semiToken2);
-                    }
-
-                    return new DeclareNode(idToken.Name, expression);
-                }
+                return new IfStatmentNode(conditional, trueStatement, falseStatement);
             }
 
             // Try to parse an expression statement, if it isn't valid it will crash here
             var expr = ParseExpression(tokens);
             // Semi colon
-            var semi = tokens.Dequeue() as FixedToken;
-            if(semi == null || semi.TokenKind != FixedToken.Kind.SemiColon)
-            {
-                throw new UnexpectedTokenException("Did not get ; token", semi);
-            }
+            TakeFixedToken(tokens, FixedToken.Kind.SemiColon);
             return new ExpressionStatementNode(expr);
         }
 

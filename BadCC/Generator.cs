@@ -14,6 +14,9 @@ namespace BadCC
         private ImmutableDictionary<string, int> localVariableMap;
         private int localVariableOffset;
 
+        private int labelCounter;
+        private FunctionNode currentFunction;
+
         private static readonly ConstantNode s_constZeroNode = new ConstantNode(0);
 
         public Generator(StreamWriter writer)
@@ -31,29 +34,27 @@ namespace BadCC
 
         private void GenerateFunction(FunctionNode function)
         {
+            currentFunction = function;
+            labelCounter = 0;
+
             writer.WriteLine(".globl _{0}", function.Name);
             writer.WriteLine("_{0}:", function.Name);
-            foreach(var statement in function.Statements)
+            foreach(var blockItem in function.BlockItems)
             {
-                GenerateStatement(statement);
+                GenerateBlockItem(blockItem);
             }
+
+            currentFunction = null;
         }
 
-        private void GenerateStatement(StatementNode statement)
+        private void GenerateBlockItem(BlockItemNode blockItem)
         {
-            if(statement is ReturnNode returnStatement)
-            {
-                // Return statement
-                GenerateExpression(returnStatement.Expression);
-                // TODO: Frame cleanup stuff
-                writer.WriteLine("ret");
-            }
-            else if(statement is DeclareNode declareNode)
+            if(blockItem is DeclareNode declareNode)
             {
                 // Variable declaration
                 if(localVariableMap.ContainsKey(declareNode.Name))
                 {
-                    throw new GeneratorException("Duplicate variable declaration!", statement);
+                    throw new GeneratorException("Duplicate variable declaration!", blockItem);
                 }
 
                 // Execute the expression or use default initializer
@@ -72,10 +73,63 @@ namespace BadCC
                 localVariableMap = localVariableMap.Add(declareNode.Name, localVariableOffset);
                 localVariableOffset -= 4;
             }
+            else if(blockItem is StatementNode statement)
+            {
+                GenerateStatement(statement);
+            }
+            else
+            {
+                throw new NotImplementedException();
+            }
+        }
+
+        private void GenerateStatement(StatementNode statement)
+        {
+            if(statement is ReturnNode returnStatement)
+            {
+                // Return statement
+                GenerateExpression(returnStatement.Expression);
+                // TODO: Frame cleanup stuff
+                writer.WriteLine("ret");
+            }
             else if(statement is ExpressionStatementNode expressionStatement)
             {
                 // Just an expression
                 GenerateExpression(expressionStatement.Expression);
+            }
+            else if(statement is IfStatmentNode ifStatment)
+            {
+                // If statement
+                // Evaluate the conditional expression and jump to the correct code segment if we have to.
+                // We need a unique name for each label, so use the function name and a counter
+                //     Format
+                // conditional expression
+                // branch
+                // true statement
+                // jmp end
+                // false statement
+
+                var startOfElseLabel = string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
+                var endOfElseLabel = string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
+
+                // Condition
+                GenerateExpression(ifStatment.Condition);
+                // Branch, jump to else label if false
+                writer.WriteLine("cmpl    $0, %eax");                   // ZF = (0 == eax)
+                writer.WriteLine("je      {0}", startOfElseLabel);      // Jump to else if ZF == 0
+                GenerateStatement(ifStatment.TrueExpression);           // Put in the true expression
+                if(ifStatment.FalseExpression != null)
+                {
+                    writer.WriteLine("jmp     {0}", endOfElseLabel);    // Jump to end
+                    writer.WriteLine("{0}:", startOfElseLabel);         // Put in start of else label
+                    GenerateStatement(ifStatment.FalseExpression);      // Else statement
+                }
+                else
+                {
+                    writer.WriteLine("{0}:", startOfElseLabel);         // Put in start of else label, will point to the same place as end label
+                }
+                writer.WriteLine("{0}:", endOfElseLabel);               // Put in end of else label last
+
             }
             else
             {

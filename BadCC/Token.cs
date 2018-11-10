@@ -42,6 +42,8 @@ namespace BadCC
             //BinaryAnd,
             //BinaryXor,
             Assignment,
+            If,
+            Else,
         }
 
         static private readonly BiMap<Kind, string> map = new BiMap<Kind, string>()
@@ -72,6 +74,8 @@ namespace BadCC
             //{ Kind.BinaryAnd, "&" },
             //{ Kind.BinaryXor, "^" },
             { Kind.Assignment, "=" },
+            { Kind.If, "if" },
+            { Kind.Else, "else" },
         };
 
         public Kind TokenKind { get; private set; }

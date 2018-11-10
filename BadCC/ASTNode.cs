@@ -49,27 +49,48 @@ namespace BadCC
     class FunctionNode : ASTNode
     {
         public string Name { get; private set; }
-        public List<StatementNode> Statements { get; private set; }
+        public List<BlockItemNode> BlockItems { get; private set; }
 
-        public FunctionNode(string name, List<StatementNode> statements)
+        public FunctionNode(string name, List<BlockItemNode> statements)
         {
             Name = name;
-            Statements = statements;
+            BlockItems = statements;
         }
 
         public override string ToString(int indentLevel)
         {
             var str = base.ToString(indentLevel);
-            foreach(var statement in Statements)
+            foreach(var blockItem in BlockItems)
             {
-                str += "\r\n" + statement.ToString(indentLevel + 1);
+                str += "\r\n" + blockItem.ToString(indentLevel + 1);
             }
             return str;
         }
     }
 
-    abstract class StatementNode : ASTNode
+    abstract class BlockItemNode : ASTNode
     {
+    }
+
+    abstract class StatementNode : BlockItemNode
+    {
+    }
+
+    class DeclareNode : BlockItemNode
+    {
+        public string Name { get; private set; }
+        public ExpressionNode Expression { get; private set; }
+
+        public DeclareNode(string name, ExpressionNode expression)
+        {
+            Name = name;
+            Expression = expression;
+        }
+
+        public override string ToString(int indentLevel)
+        {
+            return base.ToString(indentLevel) + "\r\n" + Expression?.ToString(indentLevel + 1);
+        }
     }
 
     class ReturnNode : StatementNode
@@ -86,24 +107,26 @@ namespace BadCC
             return base.ToString(indentLevel) + "\r\n" + Expression.ToString(indentLevel + 1);
         }
     }
-
-    class DeclareNode : StatementNode
+    
+    class IfStatmentNode : StatementNode
     {
-        public string Name { get; private set; }
-        public ExpressionNode Expression { get; private set; }
+        public ExpressionNode Condition { get; private set; }
+        public StatementNode TrueExpression { get; private set; }
+        public StatementNode FalseExpression { get; private set; }
 
-        public DeclareNode(string name, ExpressionNode expression)
+        public IfStatmentNode(ExpressionNode condition, StatementNode trueExpression, StatementNode falseExpression)
         {
-            Name = name;
-            Expression = expression;
+            Condition = condition;
+            TrueExpression = trueExpression;
+            FalseExpression = falseExpression;
         }
 
         public override string ToString(int indentLevel)
         {
-            return base.ToString(indentLevel) + "\r\n" + Expression?.ToString(indentLevel + 1);
+            return base.ToString(indentLevel) + "\r\n" + Condition.ToString(indentLevel + 1) + "\r\n" + TrueExpression.ToString(indentLevel + 1) + "\r\n" + FalseExpression?.ToString(indentLevel + 1);
         }
     }
-    
+
     class ExpressionStatementNode : StatementNode
     {
         public ExpressionNode Expression { get; private set; }
