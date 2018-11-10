@@ -21,13 +21,19 @@ namespace BadCC
             var properties = GetType().GetProperties();
             foreach(var prop in properties)
             {
-                if(typeof(ASTNode).IsAssignableFrom(prop.PropertyType)) { continue; }
+                if(typeof(ASTNode).IsAssignableFrom(prop.PropertyType) || 
+                    (prop.PropertyType.HasElementType && typeof(ASTNode).IsAssignableFrom(prop.PropertyType.GetElementType()))) { continue; }
 
                 sb.Append('\t', indentLevel);
                 sb.Append(prop.Name + ": ");
                 sb.AppendLine(prop.GetValue(this).ToString());
             }
             return sb.ToString();
+        }
+
+        protected string ToIndentLevel(string str, int indentLevel)
+        {
+            return new StringBuilder().Append('\t', indentLevel).Append(str).ToString();
         }
     }
 
@@ -127,6 +133,91 @@ namespace BadCC
         }
     }
 
+    class BreakStatement : StatementNode
+    {
+    }
+
+    class ContinueStatement : StatementNode
+    {
+    }
+
+    class WhileStatement : StatementNode
+    {
+        public ExpressionNode Condition { get; private set; }
+        public StatementNode Statement { get; private set; }
+
+        public WhileStatement(ExpressionNode condition, StatementNode statement)
+        {
+            Condition = condition;
+            Statement = statement;
+        }
+
+        public override string ToString(int indentLevel)
+        {
+            return base.ToString(indentLevel) + "\r\n" + Condition.ToString(indentLevel + 1) + "\r\n" + Statement.ToString(indentLevel + 1);
+        }
+    }
+
+    class DoWhileStatement : StatementNode
+    {
+        public ExpressionNode Condition { get; private set; }
+        public StatementNode Statement { get; private set; }
+
+        public DoWhileStatement(ExpressionNode condition, StatementNode statement)
+        {
+            Condition = condition;
+            Statement = statement;
+        }
+
+        public override string ToString(int indentLevel)
+        {
+            return base.ToString(indentLevel) + "\r\n" + Condition.ToString(indentLevel + 1) + "\r\n" + Statement.ToString(indentLevel + 1);
+        }
+    }
+
+    class ForStatement : StatementNode
+    {
+        public DeclareNode InitialDeclaration { get; private set; }
+        public ExpressionNode InitialExpression { get; private set; }
+        public ExpressionNode Condition { get; private set; }
+        public ExpressionNode Iteration { get; private set; }
+        public StatementNode Statement { get; private set; }
+
+        /// <summary>
+        /// Returns true if this is an expression that has a declaration as the initial 'expression'
+        /// </summary>
+        public bool IsDeclarationType => InitialDeclaration != null;
+
+        public ForStatement(ExpressionNode initialExpression, ExpressionNode condition, ExpressionNode iteration, StatementNode statement)
+        {
+            InitialExpression = initialExpression;
+            Condition = condition;
+            Iteration = iteration;
+            Statement = statement;
+        }
+
+        public ForStatement(DeclareNode initialDeclaration, ExpressionNode condition, ExpressionNode iteration, StatementNode statement)
+        {
+            InitialDeclaration = initialDeclaration;
+            Condition = condition;
+            Iteration = iteration;
+            Statement = statement;
+        }
+
+        public override string ToString(int indentLevel)
+        {
+            return base.ToString(indentLevel) + "\r\n"
+                + ToIndentLevel("Initial:\r\n", indentLevel)
+                + (InitialDeclaration != null ? InitialDeclaration.ToString(indentLevel + 1) : InitialExpression?.ToString(indentLevel + 1)) + "\r\n"
+                + ToIndentLevel("Condition:\r\n", indentLevel)
+                + Condition.ToString(indentLevel + 1) + "\r\n"
+                + ToIndentLevel("Iteration:\r\n", indentLevel)
+                + Iteration?.ToString(indentLevel + 1) + "\r\n"
+                + ToIndentLevel("Statement:\r\n", indentLevel)
+                + Statement.ToString(indentLevel + 1);
+        }
+    }
+
     class BlockStatementNode : StatementNode
     {
         public IReadOnlyList<BlockItemNode> BlockItems { get; private set; }
@@ -158,7 +249,7 @@ namespace BadCC
 
         public override string ToString(int indentLevel)
         {
-            return base.ToString(indentLevel) + "\r\n" + Expression.ToString(indentLevel + 1);
+            return base.ToString(indentLevel) + "\r\n" + Expression?.ToString(indentLevel + 1);
         }
     }
 
@@ -218,6 +309,7 @@ namespace BadCC
             LessThanOrEqual,
             GreaterThan,
             GreaterThanOrEqual,
+            Modulo,
         }
 
         public Operation Op { get; private set; }
@@ -252,6 +344,8 @@ namespace BadCC
                     Op = Operation.GreaterThan; break;
                 case FixedToken.Kind.GreaterThanOrEqual:
                     Op = Operation.GreaterThanOrEqual; break;
+                case FixedToken.Kind.Modulo:
+                    Op = Operation.Modulo; break;
                 default:
                     throw new ArgumentException("Token kind is not one for Binary operators!");
             }

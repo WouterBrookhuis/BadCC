@@ -67,24 +67,48 @@ namespace BadCC
             }
         }
 
-        private LocalVariableMap CurrentVariableMap { get { return localVariableMaps.Peek(); } }
+        private class LoopData
+        {
+            public string ContinueLabel { get; private set; }
+            public string BreakLabel { get; private set; }
+            /// <summary>
+            /// The map that break and continue should exit toward
+            /// </summary>
+            public LocalVariableMap LoopLevelMap { get; private set; }
+
+            public LoopData(string continueLabel, string breakLabel, LocalVariableMap loopLevelMap)
+            {
+                ContinueLabel = continueLabel;
+                BreakLabel = breakLabel;
+                LoopLevelMap = loopLevelMap;
+            }
+        }
+
+        private LocalVariableMap CurrentVariableMap => localVariableMaps.Peek();
+        private LoopData CurrentLoopData => loopDatas.Peek();
 
         private StreamWriter writer;
         private Stack<LocalVariableMap> localVariableMaps;
+        private Stack<LoopData> loopDatas;
 
         private int labelCounter;
         private FunctionNode currentFunction;
-
-        private static readonly ConstantNode s_constZeroNode = new ConstantNode(0);
 
         public Generator(StreamWriter writer)
         {
             this.writer = writer;
             localVariableMaps = new Stack<LocalVariableMap>();
+            loopDatas = new Stack<LoopData>();
+        }
+
+        private string GetUniqueLabel()
+        {
+            return string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
         }
 
         public void GenerateProgram(ProgramNode program)
         {
+            writer.WriteLine(".text");
             GenerateFunction(program.Function);
         }
 
@@ -96,6 +120,10 @@ namespace BadCC
             writer.WriteLine("_{0}:", function.Name);
 
             localVariableMaps.Push(new LocalVariableMap());
+
+            // Function prologue, epiloge is included in return statement generation
+            writer.WriteLine("push    %ebp");           // Store ebp on the stack
+            writer.WriteLine("movl    %esp, %ebp");     // Use the current esp as our ebp
 
             // A function body is just a block so let GenerateStatement handle it
             var tmpBlockNode = new BlockStatementNode(function.BlockItems);
@@ -119,10 +147,6 @@ namespace BadCC
                 {
                     GenerateExpression(declareNode.Expression);
                 }
-                else
-                {
-                    GenerateExpression(Generator.s_constZeroNode);
-                }
                 // Save initial value on stack
                 writer.WriteLine("push    %eax");
 
@@ -139,19 +163,64 @@ namespace BadCC
             }
         }
 
+        private void GenerateBlockEntry()
+        {
+            // TODO: ENSURE we allways have a matching call to GenerateBlockExit !
+            // Entering a block means we need a new local variable map
+            localVariableMaps.Push(new LocalVariableMap(CurrentVariableMap));
+        }
+
+        /// <summary>
+        /// Pops a variable map and generates the exit block code for it.
+        /// </summary>
+        /// <returns></returns>
+        private void GenerateBlockExit()
+        {
+            // Exiting the block means we should ditch the variable map
+            var scopeMap = localVariableMaps.Pop();
+            // Clean up stack if needed
+            GenerateBlockExit(scopeMap);
+        }
+
+        /// <summary>
+        /// Generates the code for exiting the given variable map
+        /// </summary>
+        /// <param name="map"></param>
+        private void GenerateBlockExit(LocalVariableMap map)
+        {
+            if(map.ScopeByteSize != 0)
+            {
+                writer.WriteLine("addl    ${0}, %esp", map.ScopeByteSize); // Move the stack pointer 'back' (up) to where it was before entering this block
+            }
+        }
+
+        private void EnterLoop(string continueLabel, string breakLabel, LocalVariableMap variableMap)
+        {
+            loopDatas.Push(new LoopData(continueLabel, breakLabel, variableMap));
+        }
+
+        private void ExitLoop()
+        {
+            loopDatas.Pop();
+        }
+
         private void GenerateStatement(StatementNode statement)
         {
             if(statement is ReturnNode returnStatement)
             {
                 // Return statement
                 GenerateExpression(returnStatement.Expression);
-                // TODO: Frame cleanup stuff
+                writer.WriteLine("movl    %ebp, %esp");     // Restore esp to point to the old ebp
+                writer.WriteLine("pop     %ebp");           // Restore ebp by popping it off the stack
                 writer.WriteLine("ret");
             }
             else if(statement is ExpressionStatementNode expressionStatement)
             {
-                // Just an expression
-                GenerateExpression(expressionStatement.Expression);
+                // Just an (optional) expression
+                if(expressionStatement.Expression != null)
+                {
+                    GenerateExpression(expressionStatement.Expression);
+                }
             }
             else if(statement is IfStatmentNode ifStatment)
             {
@@ -165,8 +234,8 @@ namespace BadCC
                 // jmp end
                 // false statement
 
-                var startOfElseLabel = string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
-                var endOfElseLabel = string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
+                var startOfElseLabel = GetUniqueLabel();
+                var endOfElseLabel = GetUniqueLabel();
 
                 // Condition
                 GenerateExpression(ifStatment.Condition);
@@ -190,17 +259,125 @@ namespace BadCC
             // Block statements
             else if(statement is BlockStatementNode block)
             {
-                // Entering a block means we need a new local variable map
-                localVariableMaps.Push(new LocalVariableMap(CurrentVariableMap));
+                GenerateBlockEntry();
                 // Process all block items
                 foreach(var item in block.BlockItems)
                 {
                     GenerateBlockItem(item);
                 }
-                // Exiting the block means we should ditch the variable map
-                var scopeMap = localVariableMaps.Pop();
-                // Clean up stack
-                writer.WriteLine("addl    ${0}, %esp", scopeMap.ScopeByteSize); // Move the stack pointer 'back' (up) to where it was before entering this block
+                GenerateBlockExit();
+            }
+            // For statement
+            else if(statement is ForStatement forStatement)
+            {
+                // Initial declaration / expression
+                if(forStatement.IsDeclarationType)
+                {
+                    GenerateBlockEntry();                               // Need to consider this declaration as inside a seperate block
+                    GenerateBlockItem(forStatement.InitialDeclaration);
+                }
+                else if(forStatement.InitialExpression != null)
+                {
+                    GenerateExpression(forStatement.InitialExpression);
+                }
+
+                // Loop start
+                var loopStartLabel = GetUniqueLabel();
+                var loopEndLabel = GetUniqueLabel();
+                var continueLabel = GetUniqueLabel();                   // For requires a seperate continue label because we must execute the iteration expression
+
+                EnterLoop(forStatement.Iteration != null ? continueLabel : loopStartLabel, loopEndLabel, CurrentVariableMap);
+
+                writer.WriteLine("{0}:", loopStartLabel);               // Loop start label
+                GenerateExpression(forStatement.Condition);             // The checking condition.
+                writer.WriteLine("cmpl    $0, %eax");                   // See if eax is 0
+                writer.WriteLine("je      {0}", loopEndLabel);          // Jump to end if condition was 0
+                GenerateStatement(forStatement.Statement);              // Generate the statement
+                if(forStatement.Iteration != null)
+                {
+                    writer.WriteLine("{0}:", continueLabel);            // Continue label
+                    GenerateExpression(forStatement.Iteration);         // Do the loop iteration expression after the statement
+                }
+                writer.WriteLine("jmp     {0}", loopStartLabel);        // Jump back to start of loop
+                writer.WriteLine("{0}:", loopEndLabel);                 // Insert loop end label at the end
+
+                ExitLoop();
+
+                if(forStatement.IsDeclarationType)
+                {
+                    GenerateBlockExit();                                // Clean up the 'block' we made for the declaration
+                }
+            }
+            else if(statement is WhileStatement whileStatement)
+            {
+                // Loop start
+                var loopStartLabel = GetUniqueLabel();
+                var loopEndLabel = GetUniqueLabel();
+
+                EnterLoop(loopStartLabel, loopEndLabel, CurrentVariableMap);
+
+                writer.WriteLine("{0}:", loopStartLabel);               // Loop start label
+                GenerateExpression(whileStatement.Condition);           // The checking condition.
+                writer.WriteLine("cmpl    $0, %eax");                   // See if eax is 0
+                writer.WriteLine("je      {0}", loopEndLabel);          // Jump to end if condition was 0
+                GenerateStatement(whileStatement.Statement);            // Generate the statement
+                writer.WriteLine("jmp     {0}", loopStartLabel);        // Jump back to start of loop
+                writer.WriteLine("{0}:", loopEndLabel);                 // Insert loop end label at the end
+
+                ExitLoop();
+            }
+            else if(statement is DoWhileStatement doWhileStatement)
+            {
+                // Loop start
+                var loopStartLabel = GetUniqueLabel();
+                var loopEndLabel = GetUniqueLabel();
+
+                EnterLoop(loopStartLabel, loopEndLabel, CurrentVariableMap);
+
+                writer.WriteLine("{0}:", loopStartLabel);               // Loop start label
+                GenerateStatement(doWhileStatement.Statement);          // Generate the statement
+                GenerateExpression(doWhileStatement.Condition);         // The checking condition.
+                writer.WriteLine("cmpl    $0, %eax");                   // See if eax is 0
+                writer.WriteLine("jne      {0}", loopStartLabel);       // Jump to start if condition was true
+                writer.WriteLine("{0}:", loopEndLabel);                 // Insert loop end label at the end
+
+                ExitLoop();
+            }
+            else if(statement is BreakStatement)
+            {
+                // Exit blocks we are in until we reach the stored loop map
+                var removedMaps = new Stack<LocalVariableMap>();
+                while(localVariableMaps.Peek() != CurrentLoopData.LoopLevelMap)
+                {
+                    var map = localVariableMaps.Pop();
+                    removedMaps.Push(map);
+
+                    GenerateBlockExit(map);
+                }
+                // Restore the map stack
+                while(removedMaps.Count > 0)
+                {
+                    localVariableMaps.Push(removedMaps.Pop());
+                }
+                writer.WriteLine("jmp     {0}", CurrentLoopData.BreakLabel);        // Jump to end of current loop
+            }
+            else if(statement is ContinueStatement)
+            {
+                // Exit blocks we are in until we reach the stored loop map
+                var removedMaps = new Stack<LocalVariableMap>();
+                while(localVariableMaps.Peek() != CurrentLoopData.LoopLevelMap)
+                {
+                    var map = localVariableMaps.Pop();
+                    removedMaps.Push(map);
+
+                    GenerateBlockExit(map);
+                }
+                // Restore the map stack
+                while(removedMaps.Count > 0)
+                {
+                    localVariableMaps.Push(removedMaps.Pop());
+                }
+                writer.WriteLine("jmp     {0}", CurrentLoopData.ContinueLabel);     // Jump to the correct label
             }
             else
             {
@@ -277,6 +454,17 @@ namespace BadCC
                         writer.WriteLine("pop     %eax");                   // Pop left hand side result off the stack into EAX
                         writer.WriteLine("movl    $0, %edx");               // Clear EDX
                         writer.WriteLine("idiv    %ebx");                   // eax = (edx:eax) / ebx, note that remainder is in edx
+                        break;
+
+                    case BinaryNode.Operation.Modulo:
+                        GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
+                        writer.WriteLine("push    %eax");                   // Push left hand side result on stack
+                        GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
+                        writer.WriteLine("movl    %eax, %ebx");             // Move result of right hand side into EBX
+                        writer.WriteLine("pop     %eax");                   // Pop left hand side result off the stack into EAX
+                        writer.WriteLine("movl    $0, %edx");               // Clear EDX
+                        writer.WriteLine("idiv    %ebx");                   // eax = (edx:eax) / ebx, the remainder is in edx
+                        writer.WriteLine("movl    %edx, %eax");             // Move the remainder to EAX
                         break;
 
                     case BinaryNode.Operation.Equal:
@@ -370,6 +558,7 @@ namespace BadCC
                 // Variable assignment
                 if(CurrentVariableMap.TryGetOffset(assignmentNode.Name, out int variableOffset))
                 {
+                    GenerateExpression(assignmentNode.Expression);
                     writer.WriteLine("movl    %eax, {0}(%ebp)", variableOffset);    // Store eax in memory at ebp + variableOffset
                 }
                 else
@@ -392,8 +581,8 @@ namespace BadCC
             else if(expression is ConditionalNode conditional)
             {
                 // Conditional expression a ? b : c
-                var startOfElseLabel = string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
-                var endOfElseLabel = string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
+                var startOfElseLabel = GetUniqueLabel();
+                var endOfElseLabel = GetUniqueLabel();
 
                 // Condition
                 GenerateExpression(conditional.Condition);

@@ -8,13 +8,19 @@ namespace BadCC
 {
     class Parser
     {
+        private static readonly ConstantNode s_constZeroNode = new ConstantNode(0);
+        private static readonly ConstantNode s_constOneNode = new ConstantNode(1);
+
+
+        private Queue<Token> tokens;
+
         /// <summary>
         /// Takes a fixed token from the queue, throws an exception if it can't.
         /// </summary>
         /// <param name="tokens">The token queue</param>
         /// <param name="kind">The kind of token to dequeue</param>
         /// <exception cref="UnexpectedTokenException">Thrown when the given token kind is not first in the queue</exception>
-        private void TakeFixedToken(Queue<Token> tokens, FixedToken.Kind kind)
+        private void TakeFixedToken(FixedToken.Kind kind)
         {
             var typeToken = tokens.Dequeue() as FixedToken;
             if(typeToken == null || typeToken.TokenKind != kind)
@@ -29,7 +35,7 @@ namespace BadCC
         /// <param name="tokens">Queue of tokens</param>
         /// <param name="kind">The kind of token we want to dequeue</param>
         /// <returns>True if the token was dequeued, false if it wasn't</returns>
-        private bool TryTakeFixedToken(Queue<Token> tokens, FixedToken.Kind kind)
+        private bool TryTakeFixedToken(FixedToken.Kind kind)
         {
             var typeToken = tokens.Peek() as FixedToken;
             if(typeToken == null || typeToken.TokenKind != kind)
@@ -41,12 +47,27 @@ namespace BadCC
         }
 
         /// <summary>
+        /// Peeks the next token in the queue and checks if it's a fixed token of the given kind.
+        /// </summary>
+        /// <param name="tokens"></param>
+        /// <param name="kind"></param>
+        /// <returns></returns>
+        private bool PeekFixedToken(FixedToken.Kind kind)
+        {
+            var typeToken = tokens.Peek() as FixedToken;
+            if(typeToken == null || typeToken.TokenKind != kind)
+            {
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Takes an identifier token from the queue, throws exception if it can't.
         /// </summary>
-        /// <param name="tokens">The queue of tokens</param>
         /// <returns>IdentifierToken that was dequeued</returns>
         /// <exception cref="UnexpectedTokenException">Thrown if the first token in the queue is not an IdentifierToken</exception>
-        private IdentifierToken TakeIdentifierToken(Queue<Token> tokens)
+        private IdentifierToken TakeIdentifierToken()
         {
             var token = tokens.Dequeue() as IdentifierToken;
             if(token == null)
@@ -58,15 +79,19 @@ namespace BadCC
 
         public ProgramNode ParseProgram(Queue<Token> tokens)
         {
-            var function = ParseFunction(tokens);
+            this.tokens = tokens;
+
+            var function = ParseFunction();
             if(tokens.Count > 0)
             {
                 throw new UnexpectedTokenException("Reached end of program but found a token", tokens.Peek());
             }
+
+            tokens = null;
             return new ProgramNode(function);
         }
 
-        private FunctionNode ParseFunction(Queue<Token> tokens)
+        private FunctionNode ParseFunction()
         {
             // Return type of the function
             var typeToken = tokens.Dequeue() as FixedToken;
@@ -76,22 +101,22 @@ namespace BadCC
             }
 
             // Identifier of the function
-            var nameToken = TakeIdentifierToken(tokens);
+            var nameToken = TakeIdentifierToken();
 
             // Opening parenthesis
-            TakeFixedToken(tokens, FixedToken.Kind.ParOpen);
+            TakeFixedToken(FixedToken.Kind.ParOpen);
 
             // Closing parenthesis
-            TakeFixedToken(tokens, FixedToken.Kind.ParClose);
+            TakeFixedToken(FixedToken.Kind.ParClose);
 
             // Opening bracket
-            TakeFixedToken(tokens, FixedToken.Kind.BracketOpen);
+            TakeFixedToken(FixedToken.Kind.BracketOpen);
 
             // Parse statements until we find (and take!) a closing bracket after one
             var blockItems = new List<BlockItemNode>();
-            while(!TryTakeFixedToken(tokens, FixedToken.Kind.BracketClose))
+            while(!TryTakeFixedToken(FixedToken.Kind.BracketClose))
             {
-                var statement = ParseBlockItem(tokens);
+                var statement = ParseBlockItem();
                 blockItems.Add(statement);
             };
 
@@ -106,87 +131,203 @@ namespace BadCC
             return new FunctionNode(nameToken.Name, blockItems);
         }
 
-        private BlockItemNode ParseBlockItem(Queue<Token> tokens)
+        private BlockItemNode ParseBlockItem()
         {
-            // Integer variable declaration
-            if(TryTakeFixedToken(tokens, FixedToken.Kind.Int))
+            // TODO: Multiple types
+            if(PeekFixedToken(FixedToken.Kind.Int))
             {
-                // Name of the variable
-                var idToken = TakeIdentifierToken(tokens);
-
-                // Check for assignment (=) to see if there is an expression here
-                ExpressionNode expression = null;
-                if(TryTakeFixedToken(tokens, FixedToken.Kind.Assignment))
-                {
-                    // The initialization expression
-                    expression = ParseExpression(tokens);
-                }
-
-                // Semi colon
-                TakeFixedToken(tokens, FixedToken.Kind.SemiColon);
-
-                return new DeclareNode(idToken.Name, expression);
+                return ParseDeclaration();
             }
 
             // It's a statement
-            return ParseStatement(tokens);
+            return ParseStatement();
         }
 
-        private StatementNode ParseStatement(Queue<Token> tokens)
+        private DeclareNode ParseDeclaration()
         {
-            // Return statement
-            if(TryTakeFixedToken(tokens, FixedToken.Kind.Return))
+            // Integer variable declaration
+            if(TryTakeFixedToken(FixedToken.Kind.Int))
             {
-                // Expression to return
-                var expression = ParseExpression(tokens);
+                // Name of the variable
+                var idToken = TakeIdentifierToken();
+
+                // Check for assignment (=) to see if there is an expression here
+                ExpressionNode expression = null;
+                if(TryTakeFixedToken(FixedToken.Kind.Assignment))
+                {
+                    // The initialization expression
+                    expression = ParseExpression();
+                }
+                else
+                {
+                    // Default initializer
+                    expression = s_constZeroNode;
+                }
 
                 // Semi colon
-                TakeFixedToken(tokens, FixedToken.Kind.SemiColon);
+                TakeFixedToken(FixedToken.Kind.SemiColon);
+
+                return new DeclareNode(idToken.Name, expression);
+            }
+            throw new UnexpectedTokenException("Expected int token", tokens.Peek());
+        }
+
+        private StatementNode ParseStatement()
+        {
+            // Return statement
+            if(TryTakeFixedToken(FixedToken.Kind.Return))
+            {
+                // Expression to return
+                var expression = ParseExpression();
+
+                // Semi colon
+                TakeFixedToken(FixedToken.Kind.SemiColon);
 
                 return new ReturnNode(expression);
             }
             // If statement
-            else if(TryTakeFixedToken(tokens, FixedToken.Kind.If))
+            else if(TryTakeFixedToken(FixedToken.Kind.If))
             {
                 // ( expr )
-                TakeFixedToken(tokens, FixedToken.Kind.ParOpen);
-                var conditional = ParseExpression(tokens);
-                TakeFixedToken(tokens, FixedToken.Kind.ParClose);
+                TakeFixedToken(FixedToken.Kind.ParOpen);
+                var conditional = ParseExpression();
+                TakeFixedToken(FixedToken.Kind.ParClose);
 
                 // True statement
-                var trueStatement = ParseStatement(tokens);
+                var trueStatement = ParseStatement();
 
                 // Optional else + statement
                 StatementNode falseStatement = null;
-                if(TryTakeFixedToken(tokens, FixedToken.Kind.Else))
+                if(TryTakeFixedToken(FixedToken.Kind.Else))
                 {
-                    falseStatement = ParseStatement(tokens);
+                    falseStatement = ParseStatement();
                 }
 
                 return new IfStatmentNode(conditional, trueStatement, falseStatement);
             }
             // Block statement
-            else if(TryTakeFixedToken(tokens, FixedToken.Kind.BracketOpen))
+            else if(TryTakeFixedToken(FixedToken.Kind.BracketOpen))
             {
                 // Parse statements until we find (and take!) a closing bracket after one
                 var blockItems = new List<BlockItemNode>();
-                while(!TryTakeFixedToken(tokens, FixedToken.Kind.BracketClose))
+                while(!TryTakeFixedToken(FixedToken.Kind.BracketClose))
                 {
-                    var statement = ParseBlockItem(tokens);
+                    var statement = ParseBlockItem();
                     blockItems.Add(statement);
                 };
 
                 return new BlockStatementNode(blockItems);
             }
+            // Break and continue
+            else if(TryTakeFixedToken(FixedToken.Kind.Break))
+            {
+                TakeFixedToken(FixedToken.Kind.SemiColon);
+                return new BreakStatement();
+            }
+            else if(TryTakeFixedToken(FixedToken.Kind.Continue))
+            {
+                TakeFixedToken(FixedToken.Kind.SemiColon);
+                return new ContinueStatement();
+            }
+            // While statement
+            else if(TryTakeFixedToken(FixedToken.Kind.While))
+            {
+                // while ( expr ) statement
+                TakeFixedToken(FixedToken.Kind.ParOpen);
+                var expr = ParseExpression();
+                TakeFixedToken(FixedToken.Kind.ParClose);
+                var statement = ParseStatement();
+                return new WhileStatement(expr, statement);
+            }
+            // Do while statement
+            else if(TryTakeFixedToken(FixedToken.Kind.Do))
+            {
+                // do statement while expr ;
+                var statement = ParseStatement();
+                TakeFixedToken(FixedToken.Kind.While);
+                var expr = ParseExpression();
+                TakeFixedToken(FixedToken.Kind.SemiColon);
+                return new DoWhileStatement(expr, statement);
+            }
+            // For statement
+            else if(TryTakeFixedToken(FixedToken.Kind.For))
+            {
+                // We have two options
+                // for ( decl opt-exp ; opt-exp ) statement
+                // for ( opt-exp ; opt-exp ; opt-exp ) statement
+                DeclareNode initialDeclare = null;
+                ExpressionNode initialExpr = null;
+                TakeFixedToken(FixedToken.Kind.ParOpen);
+                // TODO: Support for other types
+                if(PeekFixedToken(FixedToken.Kind.Int))
+                {
+                    // decl
+                    initialDeclare = ParseDeclaration();
+                }
+                else
+                {
+                    // opt-exp ;
+                    initialExpr = ParseOptionalExpression();
+                    TakeFixedToken(FixedToken.Kind.SemiColon);
+                }
 
-            // Try to parse an expression statement, if it isn't valid it will crash here
-            var expr = ParseExpression(tokens);
-            // Semi colon
-            TakeFixedToken(tokens, FixedToken.Kind.SemiColon);
+                var conditionExpr = ParseOptionalExpression();
+                TakeFixedToken(FixedToken.Kind.SemiColon);
+                var iterationExpr = ParseOptionalExpression();
+                TakeFixedToken(FixedToken.Kind.ParClose);
+                var statement = ParseStatement();
+
+                // Condition expression must be replaced with a non-zero constant if it's missing
+                if(conditionExpr == null)
+                {
+                    conditionExpr = s_constOneNode;
+                }
+
+                if(initialDeclare != null)
+                {
+                    return new ForStatement(initialDeclare, conditionExpr, iterationExpr, statement);
+                }
+                return new ForStatement(initialExpr, conditionExpr, iterationExpr, statement);
+            }
+
+            // Treat it as an expression statement
+            return ParseExpressionStatement();
+        }
+
+        private ExpressionStatementNode ParseExpressionStatement()
+        {
+            // Check for empty statement
+            if(TryTakeFixedToken(FixedToken.Kind.SemiColon))
+            {
+                // TODO: It might be worth filtering these out later
+                return new ExpressionStatementNode(null);
+            }
+            // expr ;
+            var expr = ParseExpression();
+            TakeFixedToken(FixedToken.Kind.SemiColon);
             return new ExpressionStatementNode(expr);
         }
 
-        private ExpressionNode ParseExpression(Queue<Token> tokens)
+        /// <summary>
+        /// Parses an optional expression followed by a ; or ) BUT NOT the ; or ) at the end.
+        /// Returns null of no expression is found.
+        /// </summary>
+        /// <param name="tokens"></param>
+        /// <returns>Null if no expression was found, the expression node otherwise.</returns>
+        private ExpressionNode ParseOptionalExpression()
+        {
+            // [expr] ; | [expr] )
+            if(PeekFixedToken(FixedToken.Kind.SemiColon)
+                || PeekFixedToken(FixedToken.Kind.ParClose))
+            {
+                // No expression found
+                return null;
+            }
+
+            return ParseExpression();
+        }
+
+        private ExpressionNode ParseExpression()
         {
             // Assignment or variable expression
             if(tokens.Peek() is IdentifierToken idToken)
@@ -200,7 +341,7 @@ namespace BadCC
                     tokens.Dequeue();
 
                     // Expression
-                    var expression = ParseExpression(tokens);
+                    var expression = ParseExpression();
 
                     return new AssignmentNode(idToken.Name, expression);
                 }
@@ -209,27 +350,27 @@ namespace BadCC
             }
 
             // Conditional expression
-            return ParseConditionalExpression(tokens);
+            return ParseConditionalExpression();
         }
 
-        private ExpressionNode ParseConditionalExpression(Queue<Token> tokens)
+        private ExpressionNode ParseConditionalExpression()
         {
-            ExpressionNode expr = ParseLogicalOrExpression(tokens);
+            ExpressionNode expr = ParseLogicalOrExpression();
 
-            if(TryTakeFixedToken(tokens, FixedToken.Kind.Conditional))
+            if(TryTakeFixedToken(FixedToken.Kind.Conditional))
             {
-                var trueExpression = ParseExpression(tokens);
-                TakeFixedToken(tokens, FixedToken.Kind.Colon);
-                var falseExpression = ParseConditionalExpression(tokens);
+                var trueExpression = ParseExpression();
+                TakeFixedToken(FixedToken.Kind.Colon);
+                var falseExpression = ParseConditionalExpression();
                 return new ConditionalNode(expr, trueExpression, falseExpression);
             }
 
             return expr;
         }
 
-        private ExpressionNode ParseLogicalOrExpression(Queue<Token> tokens)
+        private ExpressionNode ParseLogicalOrExpression()
         {
-            ExpressionNode expr = ParseLogicalAndExpression(tokens);
+            ExpressionNode expr = ParseLogicalAndExpression();
 
             var nextToken = tokens.Peek() as FixedToken;
             while(nextToken != null &&
@@ -237,7 +378,7 @@ namespace BadCC
             {
                 nextToken = tokens.Dequeue() as FixedToken; // Remove the token
 
-                var nextExpr = ParseLogicalAndExpression(tokens);
+                var nextExpr = ParseLogicalAndExpression();
                 expr = new BinaryNode(nextToken.TokenKind, expr, nextExpr);
 
                 nextToken = tokens.Peek() as FixedToken;
@@ -246,9 +387,9 @@ namespace BadCC
             return expr;
         }
 
-        private ExpressionNode ParseLogicalAndExpression(Queue<Token> tokens)
+        private ExpressionNode ParseLogicalAndExpression()
         {
-            ExpressionNode expr = ParseEqualityExpression(tokens);
+            ExpressionNode expr = ParseEqualityExpression();
 
             var nextToken = tokens.Peek() as FixedToken;
             while(nextToken != null &&
@@ -256,7 +397,7 @@ namespace BadCC
             {
                 nextToken = tokens.Dequeue() as FixedToken; // Remove the token
 
-                var nextExpr = ParseEqualityExpression(tokens);
+                var nextExpr = ParseEqualityExpression();
                 expr = new BinaryNode(nextToken.TokenKind, expr, nextExpr);
 
                 nextToken = tokens.Peek() as FixedToken;
@@ -265,9 +406,9 @@ namespace BadCC
             return expr;
         }
 
-        private ExpressionNode ParseEqualityExpression(Queue<Token> tokens)
+        private ExpressionNode ParseEqualityExpression()
         {
-            ExpressionNode expr = ParseRelationalExpression(tokens);
+            ExpressionNode expr = ParseRelationalExpression();
 
             var nextToken = tokens.Peek() as FixedToken;
             while(nextToken != null &&
@@ -276,7 +417,7 @@ namespace BadCC
             {
                 nextToken = tokens.Dequeue() as FixedToken; // Remove the token
 
-                var nextExpr = ParseRelationalExpression(tokens);
+                var nextExpr = ParseRelationalExpression();
                 expr = new BinaryNode(nextToken.TokenKind, expr, nextExpr);
 
                 nextToken = tokens.Peek() as FixedToken;
@@ -285,9 +426,9 @@ namespace BadCC
             return expr;
         }
 
-        private ExpressionNode ParseRelationalExpression(Queue<Token> tokens)
+        private ExpressionNode ParseRelationalExpression()
         {
-            ExpressionNode expr = ParseAdditiveExpression(tokens);
+            ExpressionNode expr = ParseAdditiveExpression();
 
             var nextToken = tokens.Peek() as FixedToken;
             while(nextToken != null &&
@@ -298,7 +439,7 @@ namespace BadCC
             {
                 nextToken = tokens.Dequeue() as FixedToken; // Remove the token
 
-                var nextExpr = ParseAdditiveExpression(tokens);
+                var nextExpr = ParseAdditiveExpression();
                 expr = new BinaryNode(nextToken.TokenKind, expr, nextExpr);
 
                 nextToken = tokens.Peek() as FixedToken;
@@ -307,9 +448,9 @@ namespace BadCC
             return expr;
         }
 
-        private ExpressionNode ParseAdditiveExpression(Queue<Token> tokens)
+        private ExpressionNode ParseAdditiveExpression()
         {
-            ExpressionNode term = ParseTerm(tokens);
+            ExpressionNode term = ParseTerm();
 
             var nextToken = tokens.Peek() as FixedToken;
             while(nextToken != null &&
@@ -317,7 +458,7 @@ namespace BadCC
             {
                 nextToken = tokens.Dequeue() as FixedToken; // Remove the + or - token
 
-                var nextTerm = ParseTerm(tokens);
+                var nextTerm = ParseTerm();
                 term = new BinaryNode(nextToken.TokenKind, term, nextTerm);
 
                 nextToken = tokens.Peek() as FixedToken;
@@ -326,17 +467,19 @@ namespace BadCC
             return term;
         }
 
-        private ExpressionNode ParseTerm(Queue<Token> tokens)
+        private ExpressionNode ParseTerm()
         {
-            ExpressionNode factor = ParseFactor(tokens);
+            ExpressionNode factor = ParseFactor();
 
             var nextToken = tokens.Peek() as FixedToken;  
             while(nextToken != null && 
-                (nextToken.TokenKind == FixedToken.Kind.Multiply || nextToken.TokenKind == FixedToken.Kind.Divide))  // Check if there is a * or / after this
+                (nextToken.TokenKind == FixedToken.Kind.Multiply ||
+                nextToken.TokenKind == FixedToken.Kind.Divide || 
+                nextToken.TokenKind == FixedToken.Kind.Modulo))  // Check if there is a * or / after this
             {
                 nextToken = tokens.Dequeue() as FixedToken; // Remove the * or / token
 
-                var nextFactor = ParseFactor(tokens);
+                var nextFactor = ParseFactor();
                 factor = new BinaryNode(nextToken.TokenKind, factor, nextFactor);
 
                 nextToken = tokens.Peek() as FixedToken;
@@ -345,7 +488,7 @@ namespace BadCC
             return factor;
         }
 
-        private ExpressionNode ParseFactor(Queue<Token> tokens)
+        private ExpressionNode ParseFactor()
         {
             var token = tokens.Dequeue();
             if(token is LiteralIntToken literalIntToken)
@@ -358,12 +501,12 @@ namespace BadCC
                 // Unary op
                 if(fixedToken.IsUnaryOp())
                 {
-                    var expression = ParseFactor(tokens);
+                    var expression = ParseFactor();
                     return new UnaryNode(fixedToken.TokenKind, expression);
                 }
                 else if(fixedToken.TokenKind == FixedToken.Kind.ParOpen)
                 {
-                    var expression = ParseExpression(tokens);
+                    var expression = ParseExpression();
                     token = tokens.Dequeue();
                     if(token is FixedToken closingToken && closingToken.TokenKind == FixedToken.Kind.ParClose)
                     {

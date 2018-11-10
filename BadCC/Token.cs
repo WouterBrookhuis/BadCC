@@ -46,6 +46,12 @@ namespace BadCC
             Else,
             Conditional,
             Colon,
+            For,
+            While,
+            Do,
+            Break,
+            Continue,
+            Modulo,
         }
 
         static private readonly BiMap<Kind, string> map = new BiMap<Kind, string>()
@@ -80,6 +86,12 @@ namespace BadCC
             { Kind.Else, "else" },
             { Kind.Conditional, "?" },
             { Kind.Colon, ":" },
+            { Kind.For, "for" },
+            { Kind.While, "while" },
+            { Kind.Do, "do" },
+            { Kind.Break, "break" },
+            { Kind.Continue, "continue" },
+            { Kind.Modulo, "%" },
         };
 
         public Kind TokenKind { get; private set; }
