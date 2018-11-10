@@ -22,7 +22,7 @@ namespace BadCC
             foreach(var prop in properties)
             {
                 if(typeof(ASTNode).IsAssignableFrom(prop.PropertyType) || 
-                    (prop.PropertyType.HasElementType && typeof(ASTNode).IsAssignableFrom(prop.PropertyType.GetElementType()))) { continue; }
+                    (prop.PropertyType.IsGenericType)) { continue; }
 
                 sb.Append('\t', indentLevel);
                 sb.Append(prop.Name + ": ");
@@ -39,36 +39,55 @@ namespace BadCC
 
     class ProgramNode : ASTNode
     {
-        public FunctionNode Function { get; private set; }
+        public IReadOnlyList<FunctionNode> Functions { get; private set; }
 
-        public ProgramNode(FunctionNode function)
+        public ProgramNode(IReadOnlyList<FunctionNode> functions)
         {
-            Function = function;
+            Functions = functions;
         }
 
         public override string ToString(int indentLevel)
         {
-            return base.ToString(indentLevel) + "\r\n" + Function.ToString(indentLevel + 1);
+            var str = base.ToString(indentLevel);
+            str += ToIndentLevel("Parameters:", indentLevel) + "\r\n";
+            foreach (var function in Functions)
+            {
+                str += function.ToString(indentLevel + 1) + "\r\n";
+            }
+            return str;
         }
     }
 
     class FunctionNode : ASTNode
     {
         public string Name { get; private set; }
-        public List<BlockItemNode> BlockItems { get; private set; }
+        public IReadOnlyList<string> Parameters { get; private set; }
+        public IReadOnlyList<BlockItemNode> BodyItems { get; private set; }
 
-        public FunctionNode(string name, List<BlockItemNode> statements)
+        public bool IsDefinition => BodyItems != null;
+
+        public FunctionNode(string name, IReadOnlyList<string> parameters, IReadOnlyList<BlockItemNode> bodyItems)
         {
             Name = name;
-            BlockItems = statements;
+            Parameters = parameters;
+            BodyItems = bodyItems;
         }
 
         public override string ToString(int indentLevel)
         {
             var str = base.ToString(indentLevel);
-            foreach(var blockItem in BlockItems)
+            str += ToIndentLevel("Parameters:", indentLevel) + "\r\n";
+            foreach (var param in Parameters)
             {
-                str += "\r\n" + blockItem.ToString(indentLevel + 1);
+                str += ToIndentLevel(param, indentLevel + 1) + "\r\n";
+            }
+            if(IsDefinition)
+            {
+                str += ToIndentLevel("Body:", indentLevel) + "\r\n";
+                foreach (var blockItem in BodyItems)
+                {
+                    str += "\r\n" + blockItem.ToString(indentLevel + 1);
+                }
             }
             return str;
         }
@@ -417,5 +436,30 @@ namespace BadCC
         {
             Value = value;
         }
+    }
+
+    class CallNode : ExpressionNode
+    {
+        public string Name { get; private set; }
+        public IReadOnlyList<ExpressionNode> Parameters { get; private set; }
+
+        public CallNode(string name, IReadOnlyList<ExpressionNode> parameters)
+        {
+            Name = name;
+            Parameters = parameters;
+        }
+
+
+        public override string ToString(int indentLevel)
+        {
+            var str = base.ToString(indentLevel);
+            str += ToIndentLevel("Parameters:", indentLevel) + "\r\n";
+            foreach (var param in Parameters)
+            {
+                str += "\r\n" + param.ToString(indentLevel + 1);
+            }
+            return str;
+        }
+
     }
 }

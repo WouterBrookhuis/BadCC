@@ -52,6 +52,7 @@ namespace BadCC
             Break,
             Continue,
             Modulo,
+            Comma,
         }
 
         static private readonly BiMap<Kind, string> map = new BiMap<Kind, string>()
@@ -92,6 +93,7 @@ namespace BadCC
             { Kind.Break, "break" },
             { Kind.Continue, "continue" },
             { Kind.Modulo, "%" },
+            { Kind.Comma, "," },
         };
 
         public Kind TokenKind { get; private set; }
@@ -143,7 +145,7 @@ namespace BadCC
                 {
                     str += @"\b";
                 }
-                Console.WriteLine("{0} {1}", kv.Value, str);
+                //Console.WriteLine("{0} {1}", kv.Value, str);
                 sb.Append(str);
             }
             return sb.ToString();

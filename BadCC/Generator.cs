@@ -109,7 +109,10 @@ namespace BadCC
         public void GenerateProgram(ProgramNode program)
         {
             writer.WriteLine(".text");
-            GenerateFunction(program.Function);
+            foreach(var function in program.Functions)
+            {
+                GenerateFunction(function);
+            }
         }
 
         private void GenerateFunction(FunctionNode function)
@@ -126,7 +129,7 @@ namespace BadCC
             writer.WriteLine("movl    %esp, %ebp");     // Use the current esp as our ebp
 
             // A function body is just a block so let GenerateStatement handle it
-            var tmpBlockNode = new BlockStatementNode(function.BlockItems);
+            var tmpBlockNode = new BlockStatementNode(function.BodyItems);
             GenerateStatement(tmpBlockNode);
 
             currentFunction = null;
@@ -425,45 +428,45 @@ namespace BadCC
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("pop     %ebx");                   // Pop left hand side result off the stack into EBX
-                        writer.WriteLine("addl    %ebx, %eax");             // eax = ebx + eax
+                        writer.WriteLine("pop     %ecx");                   // Pop left hand side result off the stack into EBX
+                        writer.WriteLine("addl    %ecx, %eax");             // eax = ebx + eax
                         break;
 
                     case BinaryNode.Operation.Subtract:
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("movl    %eax, %ebx");             // Move result of right hand side into EBX
+                        writer.WriteLine("movl    %eax, %ecx");             // Move result of right hand side into EBX
                         writer.WriteLine("pop     %eax");                   // Pop left hand side result off the stack into EAX
-                        writer.WriteLine("subl    %ebx, %eax");             // eax = eax - ebx
+                        writer.WriteLine("subl    %ecx, %eax");             // eax = eax - ebx
                         break;
 
                     case BinaryNode.Operation.Multiply:
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("pop     %ebx");                   // Pop left hand side result off the stack into EBX
-                        writer.WriteLine("imul    %ebx, %eax");             // eax = ebx * eax
+                        writer.WriteLine("pop     %ecx");                   // Pop left hand side result off the stack into EBX
+                        writer.WriteLine("imul    %ecx, %eax");             // eax = ebx * eax
                         break;
 
                     case BinaryNode.Operation.Divide:
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("movl    %eax, %ebx");             // Move result of right hand side into EBX
+                        writer.WriteLine("movl    %eax, %ecx");             // Move result of right hand side into EBX
                         writer.WriteLine("pop     %eax");                   // Pop left hand side result off the stack into EAX
                         writer.WriteLine("movl    $0, %edx");               // Clear EDX
-                        writer.WriteLine("idiv    %ebx");                   // eax = (edx:eax) / ebx, note that remainder is in edx
+                        writer.WriteLine("idiv    %ecx");                   // eax = (edx:eax) / ebx, note that remainder is in edx
                         break;
 
                     case BinaryNode.Operation.Modulo:
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("movl    %eax, %ebx");             // Move result of right hand side into EBX
+                        writer.WriteLine("movl    %eax, %ecx");             // Move result of right hand side into EBX
                         writer.WriteLine("pop     %eax");                   // Pop left hand side result off the stack into EAX
                         writer.WriteLine("movl    $0, %edx");               // Clear EDX
-                        writer.WriteLine("idiv    %ebx");                   // eax = (edx:eax) / ebx, the remainder is in edx
+                        writer.WriteLine("idiv    %ecx");                   // eax = (edx:eax) / ebx, the remainder is in edx
                         writer.WriteLine("movl    %edx, %eax");             // Move the remainder to EAX
                         break;
 
@@ -471,8 +474,8 @@ namespace BadCC
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("pop     %ebx");                   // Pop left hand side result off the stack into EBX
-                        writer.WriteLine("cmpl    %ebx, %eax");             // Set ZF if eax = ebx
+                        writer.WriteLine("pop     %ecx");                   // Pop left hand side result off the stack into EBX
+                        writer.WriteLine("cmpl    %ecx, %eax");             // Set ZF if eax = ebx
                         writer.WriteLine("movl    $0, %eax");               // Zero eax
                         writer.WriteLine("sete    %al");                    // Set al (lowest byte of eax) to 1 IF ZF is set (e.g. ebx == eax)
                         break;
@@ -481,8 +484,8 @@ namespace BadCC
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("pop     %ebx");                   // Pop left hand side result off the stack into EBX
-                        writer.WriteLine("cmpl    %ebx, %eax");             // Set ZF if eax = ebx
+                        writer.WriteLine("pop     %ecx");                   // Pop left hand side result off the stack into EBX
+                        writer.WriteLine("cmpl    %ecx, %eax");             // Set ZF if eax = ebx
                         writer.WriteLine("movl    $0, %eax");               // Zero eax
                         writer.WriteLine("setne   %al");                    // Set al (lowest byte of eax) to 1 IF ZF is NOT SET (e.g. ebx != eax)
                         break;
@@ -491,8 +494,8 @@ namespace BadCC
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("pop     %ebx");                   // Pop left hand side result off the stack into EBX
-                        writer.WriteLine("cmpl    %eax, %ebx");             // Do LHS - RHS: If LHS < RHS sign is not set
+                        writer.WriteLine("pop     %ecx");                   // Pop left hand side result off the stack into EBX
+                        writer.WriteLine("cmpl    %eax, %ecx");             // Do LHS - RHS: If LHS < RHS sign is not set
                         writer.WriteLine("movl    $0, %eax");               // Zero eax
                         writer.WriteLine("setl    %al");                    // Set al (lowest byte of eax) to 1 IF SF != OF
                         break;
@@ -501,8 +504,8 @@ namespace BadCC
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("pop     %ebx");                   // Pop left hand side result off the stack into EBX
-                        writer.WriteLine("cmpl    %eax, %ebx");             // Do LHS - RHS: If LHS < RHS sign is not set
+                        writer.WriteLine("pop     %ecx");                   // Pop left hand side result off the stack into EBX
+                        writer.WriteLine("cmpl    %eax, %ecx");             // Do LHS - RHS: If LHS < RHS sign is not set
                         writer.WriteLine("movl    $0, %eax");               // Zero eax
                         writer.WriteLine("setle   %al");                    // Set al (lowest byte of eax) to 1 IF  SF != OF OR ZF = 1
                         break;
@@ -511,8 +514,8 @@ namespace BadCC
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("pop     %ebx");                   // Pop left hand side result off the stack into EBX
-                        writer.WriteLine("cmpl    %eax, %ebx");             // Do LHS - RHS: If LHS > RHS sign is set
+                        writer.WriteLine("pop     %ecx");                   // Pop left hand side result off the stack into EBX
+                        writer.WriteLine("cmpl    %eax, %ecx");             // Do LHS - RHS: If LHS > RHS sign is set
                         writer.WriteLine("movl    $0, %eax");               // Zero eax
                         writer.WriteLine("setg    %al");                    // Set al (lowest byte of eax) to 1 IF SF = 1
                         break;
@@ -521,8 +524,8 @@ namespace BadCC
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("pop     %ebx");                   // Pop left hand side result off the stack into EBX
-                        writer.WriteLine("cmpl    %eax, %ebx");             // Do LHS - RHS: If LHS > RHS sign is set
+                        writer.WriteLine("pop     %ecx");                   // Pop left hand side result off the stack into EBX
+                        writer.WriteLine("cmpl    %eax, %ecx");             // Do LHS - RHS: If LHS > RHS sign is set
                         writer.WriteLine("movl    $0, %eax");               // Zero eax
                         writer.WriteLine("setge   %al");                    // Set al (lowest byte of eax) to 1 IF SF = 1 OR ZF = 1
                         break;
@@ -531,8 +534,8 @@ namespace BadCC
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("pop     %ebx");                   // Pop left hand side result off the stack into EBX
-                        writer.WriteLine("orl     %ebx, %eax");             // Or eax with ebx, !(eax | ebx) == ZF
+                        writer.WriteLine("pop     %ecx");                   // Pop left hand side result off the stack into EBX
+                        writer.WriteLine("orl     %ecx, %eax");             // Or eax with ebx, !(eax | ebx) == ZF
                         writer.WriteLine("movl    $0, %eax");               // Zero eax
                         writer.WriteLine("setne   %al");                    // Set al (lowest byte of eax) to 1 IF ZF == 0
                         break;
@@ -541,13 +544,13 @@ namespace BadCC
                         GenerateExpression(binaryNode.FirstTerm);   // Store the result of the left hand side in EAX
                         writer.WriteLine("push    %eax");                   // Push left hand side result on stack
                         GenerateExpression(binaryNode.SecondTerm);  // Store the result of the right hand side in EAX
-                        writer.WriteLine("pop     %ebx");                   // Pop left hand side result off the stack into EBX
-                        writer.WriteLine("cmpl    $0, %ebx");               // Set ZF iff ebx == 0
-                        writer.WriteLine("setne   %bl");                    // Set bl = 1 iff ebx != 0
+                        writer.WriteLine("pop     %ecx");                   // Pop left hand side result off the stack into EBX
+                        writer.WriteLine("cmpl    $0, %ecx");               // Set ZF iff ebx == 0
+                        writer.WriteLine("setne   %cl");                    // Set bl = 1 iff ebx != 0
                         writer.WriteLine("cmpl    $0, %eax");               // Set ZF iff eax == 0
                         writer.WriteLine("movl    $0, %eax");               // Clear eax
                         writer.WriteLine("setne   %al");                    // Set al = 1 iff eax != 0
-                        writer.WriteLine("andb    %bl, %al");               // And bl & al, al = 1 iif bl = 1 and al = 1
+                        writer.WriteLine("andb    %cl, %al");               // And bl & al, al = 1 iif bl = 1 and al = 1
                         break;
                     default:
                         throw new NotImplementedException();

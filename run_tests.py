@@ -65,7 +65,7 @@ def run_stage_tests(stage_nr, variant = None):
 #run_stage_tests(6, "expression")
 #run_stage_tests(6, "statement")
 #run_stage_tests(7)
-run_stage_tests(8)
+run_stage_tests(9)
 
 if glb_good_tests == glb_total_tests:
     print("PASSED:", glb_good_tests, "/", glb_total_tests, "tests succeeded")

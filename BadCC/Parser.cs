@@ -11,8 +11,9 @@ namespace BadCC
         private static readonly ConstantNode s_constZeroNode = new ConstantNode(0);
         private static readonly ConstantNode s_constOneNode = new ConstantNode(1);
 
-
         private Queue<Token> tokens;
+        private Dictionary<string, FunctionNode> functionDeclarations;
+        private Dictionary<string, FunctionNode> functionDefinitions;
 
         /// <summary>
         /// Takes a fixed token from the queue, throws an exception if it can't.
@@ -80,15 +81,17 @@ namespace BadCC
         public ProgramNode ParseProgram(Queue<Token> tokens)
         {
             this.tokens = tokens;
+            functionDeclarations = new Dictionary<string, FunctionNode>();
+            functionDefinitions = new Dictionary<string, FunctionNode>();
 
-            var function = ParseFunction();
-            if(tokens.Count > 0)
+            var functions = new List<FunctionNode>();
+            while(tokens.Count > 0)
             {
-                throw new UnexpectedTokenException("Reached end of program but found a token", tokens.Peek());
+                functions.Add(ParseFunction());
             }
 
             tokens = null;
-            return new ProgramNode(function);
+            return new ProgramNode(functions);
         }
 
         private FunctionNode ParseFunction()
@@ -105,30 +108,82 @@ namespace BadCC
 
             // Opening parenthesis
             TakeFixedToken(FixedToken.Kind.ParOpen);
-
-            // Closing parenthesis
-            TakeFixedToken(FixedToken.Kind.ParClose);
-
-            // Opening bracket
-            TakeFixedToken(FixedToken.Kind.BracketOpen);
-
-            // Parse statements until we find (and take!) a closing bracket after one
-            var blockItems = new List<BlockItemNode>();
-            while(!TryTakeFixedToken(FixedToken.Kind.BracketClose))
+            // Parse parameters until we hit and take the closing parenthesis
+            var parameters = new List<string>();
+            while(!TryTakeFixedToken(FixedToken.Kind.ParClose))
             {
-                var statement = ParseBlockItem();
-                blockItems.Add(statement);
-            };
-
-
-            // Check if we are missing a return statement. If so add a return 0;
-            // TODO: Update this to handle void and other return types when we get to it
-            if(blockItems.Count == 0 || !(blockItems[blockItems.Count - 1] is ReturnNode))
-            {
-                blockItems.Add(new ReturnNode(new ConstantNode(0)));
+                // TODO: Other types...
+                if(parameters.Count > 0)
+                {
+                    // Not the first parameter, so we should have a comma
+                    TakeFixedToken(FixedToken.Kind.Comma);
+                }
+                TakeFixedToken(FixedToken.Kind.Int);        // int
+                var name = TakeIdentifierToken().Name;      // name
+                if(parameters.Contains(name))
+                {
+                    throw new ParsingException(string.Format("Duplicate parameter name {0} in function {1}", name, nameToken.Name));
+                }
+                parameters.Add(name);
             }
 
-            return new FunctionNode(nameToken.Name, blockItems);
+            // We should get either a semi or a opening bracket
+            if (TryTakeFixedToken(FixedToken.Kind.SemiColon))
+            {
+                // This is just a declaration
+                var node = new FunctionNode(nameToken.Name, parameters, null);
+                if(functionDeclarations.ContainsKey(nameToken.Name) &&
+                    functionDeclarations[nameToken.Name].Parameters.Count != parameters.Count)
+                {
+                    throw new ParsingException("Conflicting function declarations for " + nameToken.Name);
+                }
+                functionDeclarations[node.Name] = node;
+                return node;
+            }
+            else
+            {
+                // This should be a definition, but register declaration first to allow recursion
+                var tmpDefNode = new FunctionNode(nameToken.Name, parameters, null);
+                if (functionDeclarations.ContainsKey(nameToken.Name) &&
+                    functionDeclarations[nameToken.Name].Parameters.Count != parameters.Count)
+                {
+                    throw new ParsingException("Conflicting function declarations for " + nameToken.Name);
+                }
+                functionDeclarations[tmpDefNode.Name] = tmpDefNode;
+
+                // Opening bracket
+                TakeFixedToken(FixedToken.Kind.BracketOpen);
+
+                // Parse statements until we find (and take!) a closing bracket after one
+                var blockItems = new List<BlockItemNode>();
+                while (!TryTakeFixedToken(FixedToken.Kind.BracketClose))
+                {
+                    var statement = ParseBlockItem();
+                    blockItems.Add(statement);
+                };
+
+                // Check if we are missing a return statement. If so add a return 0;
+                // TODO: Update this to handle void and other return types when we get to it
+                if (blockItems.Count == 0 || !(blockItems[blockItems.Count - 1] is ReturnNode))
+                {
+                    blockItems.Add(new ReturnNode(new ConstantNode(0)));
+                }
+
+                // Create definition node
+                var node = new FunctionNode(nameToken.Name, parameters, blockItems);
+                if (functionDeclarations.ContainsKey(nameToken.Name) &&
+                    functionDeclarations[nameToken.Name].Parameters.Count != parameters.Count)
+                {
+                    throw new ParsingException("Conflicting function declarations for " + nameToken.Name);
+                }
+                functionDeclarations[node.Name] = node;
+                if(functionDefinitions.ContainsKey(node.Name))
+                {
+                    throw new ParsingException("More than 1 function definition for" + nameToken.Name);
+                }
+                functionDefinitions.Add(node.Name, node);
+                return node;
+            }
         }
 
         private BlockItemNode ParseBlockItem()
@@ -516,7 +571,33 @@ namespace BadCC
             }
             else if(token is IdentifierToken idToken)
             {
-                // Variable reference
+                // Variable reference or function call
+                if(TryTakeFixedToken(FixedToken.Kind.ParOpen))
+                {
+                    // Function call: id ( [expr][,expr] )
+                    var expressions = new List<ExpressionNode>();
+                    while(!TryTakeFixedToken(FixedToken.Kind.ParClose))
+                    {
+                        if(expressions.Count > 0)
+                        {
+                            TakeFixedToken(FixedToken.Kind.Comma);
+                        }
+                        expressions.Add(ParseExpression());
+                    }
+                    if(functionDeclarations.TryGetValue(idToken.Name, out FunctionNode calledNode))
+                    {
+                        if(calledNode.Parameters.Count != expressions.Count)
+                        {
+                            throw new ParsingException(string.Format("Function {0} does not take {1} arguments", idToken.Name, expressions.Count));
+                        }
+                    }
+                    else
+                    {
+                        throw new ParsingException("Missing function declaration for " + idToken.Name);
+                    }
+                    return new CallNode(idToken.Name, expressions);
+                }
+
                 return new VariableNode(idToken.Name);
             }
 
