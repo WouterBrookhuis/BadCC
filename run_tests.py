@@ -6,16 +6,19 @@ compiler_path = "badcc/bin/debug/badcc"
 
 stages_folder = "write_a_c_compiler-master"
 
+glb_good_tests = 0
+glb_total_tests = 0
+
 def compile_file(file_name):
     process = subprocess.Popen([compiler_path, file_name])
     process.wait()
     return process.returncode == 0
 
-def run_stage_tests(stage_nr):
-    print("Running valid tests for stage", stage_nr)
+def run_stage_tests(stage_nr, variant = None):
+    print("Running valid tests for stage", stage_nr, variant)
     base_path = os.path.join(stages_folder, "stage_" + str(stage_nr), "valid")
-    if stage_nr == 6:
-        base_path = os.path.join(base_path, "statement")
+    if variant is not None:
+        base_path = os.path.join(base_path, variant)
     
     valid_tests =  os.listdir(base_path)
     good_tests = 0
@@ -32,8 +35,8 @@ def run_stage_tests(stage_nr):
 
     print("Running invalid tests for stage", stage_nr)
     base_path = os.path.join(stages_folder, "stage_" + str(stage_nr), "invalid")
-    if stage_nr == 6:
-        base_path = os.path.join(base_path, "statement")
+    if variant is not None:
+        base_path = os.path.join(base_path, variant)
     
     valid_tests = os.listdir(base_path)
     for test in valid_tests:
@@ -46,10 +49,23 @@ def run_stage_tests(stage_nr):
             else:
                 print("Failed,", test)
 
-    print("Passed", good_tests, "/", total_tests, "tests for stage", stage_nr)
+    print("Passed", good_tests, "/", total_tests, "tests for stage", stage_nr, variant, "\n")
+
+    global glb_good_tests
+    global glb_total_tests
+
+    glb_good_tests += good_tests
+    glb_total_tests += total_tests
+
 #run_stage_tests(1)
 #run_stage_tests(2)
 #run_stage_tests(3)
 #run_stage_tests(4)
 #run_stage_tests(5)
-run_stage_tests(6)
+run_stage_tests(6, "expression")
+run_stage_tests(6, "statement")
+
+if glb_good_tests == glb_total_tests:
+    print("PASSED:", glb_good_tests, "/", glb_total_tests, "tests succeeded")
+else:
+    print("FAILED:", glb_good_tests, "/", glb_total_tests, "tests succeeded")

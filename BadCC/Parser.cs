@@ -99,7 +99,6 @@ namespace BadCC
                 blockItems.Add(new ReturnNode(new ConstantNode(0)));
             }
 
-
             return new FunctionNode(nameToken.Name, blockItems);
         }
 
@@ -192,8 +191,23 @@ namespace BadCC
                 // Variable expression probably, fall trough
             }
 
-            // Or expression
-            return ParseLogicalOrExpression(tokens);
+            // Conditional expression
+            return ParseConditionalExpression(tokens);
+        }
+
+        private ExpressionNode ParseConditionalExpression(Queue<Token> tokens)
+        {
+            ExpressionNode expr = ParseLogicalOrExpression(tokens);
+
+            if(TryTakeFixedToken(tokens, FixedToken.Kind.Conditional))
+            {
+                var trueExpression = ParseExpression(tokens);
+                TakeFixedToken(tokens, FixedToken.Kind.Colon);
+                var falseExpression = ParseConditionalExpression(tokens);
+                return new ConditionalNode(expr, trueExpression, falseExpression);
+            }
+
+            return expr;
         }
 
         private ExpressionNode ParseLogicalOrExpression(Queue<Token> tokens)

@@ -318,6 +318,23 @@ namespace BadCC
                     throw new GeneratorException("Reference to undeclared variable", variableNode);
                 }
             }
+            else if(expression is ConditionalNode conditional)
+            {
+                // Conditional expression a ? b : c
+                var startOfElseLabel = string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
+                var endOfElseLabel = string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
+
+                // Condition
+                GenerateExpression(conditional.Condition);
+                // Branch, jump to else label if false
+                writer.WriteLine("cmpl    $0, %eax");                   // ZF = (0 == eax)
+                writer.WriteLine("je      {0}", startOfElseLabel);      // Jump to else if ZF == 0
+                GenerateExpression(conditional.TrueExpression);         // Put in the true expression
+                writer.WriteLine("jmp     {0}", endOfElseLabel);        // Jump to end
+                writer.WriteLine("{0}:", startOfElseLabel);             // Put in start of else label
+                GenerateExpression(conditional.FalseExpression);        // Else statement
+                writer.WriteLine("{0}:", endOfElseLabel);               // Put in end of else label last
+            }
             else
             {
                 throw new NotImplementedException();

@@ -163,6 +163,25 @@ namespace BadCC
         }
     }
 
+    class ConditionalNode : ExpressionNode
+    {
+        public ExpressionNode Condition { get; private set; }
+        public ExpressionNode TrueExpression { get; private set; }
+        public ExpressionNode FalseExpression { get; private set; }
+
+        public ConditionalNode(ExpressionNode condition, ExpressionNode trueExpression, ExpressionNode falseExpression)
+        {
+            Condition = condition;
+            TrueExpression = trueExpression;
+            FalseExpression = falseExpression;
+        }
+
+        public override string ToString(int indentLevel)
+        {
+            return base.ToString(indentLevel) + "\r\n" + Condition.ToString(indentLevel + 1) + "\r\n" + TrueExpression.ToString(indentLevel + 1) + "\r\n" + FalseExpression?.ToString(indentLevel + 1);
+        }
+    }
+
     class BinaryNode : ExpressionNode
     {
         public enum Operation

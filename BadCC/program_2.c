@@ -1,9 +1,7 @@
 ﻿int main() {
-	int a = 2;
-	int b = 8;
-	if(a < 2)
-		b = 1;
-	else if(b)
-		b = 2;
-	return b;
+	int a = 1;
+	int b = 2;
+	int flag = 0;
+
+	return a > b ? 5 : flag ? 6 : 7;
 }

@@ -44,6 +44,8 @@ namespace BadCC
             Assignment,
             If,
             Else,
+            Conditional,
+            Colon,
         }
 
         static private readonly BiMap<Kind, string> map = new BiMap<Kind, string>()
@@ -76,6 +78,8 @@ namespace BadCC
             { Kind.Assignment, "=" },
             { Kind.If, "if" },
             { Kind.Else, "else" },
+            { Kind.Conditional, "?" },
+            { Kind.Colon, ":" },
         };
 
         public Kind TokenKind { get; private set; }
