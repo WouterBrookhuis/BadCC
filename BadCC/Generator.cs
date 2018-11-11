@@ -28,22 +28,50 @@ namespace BadCC
             return string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
         }
 
+        private string GetFunctionLabel(string functionName)
+        {
+            return string.Format("_{0}", functionName);
+        }
+
+        public void GenerateProgram(ProgramNode program)
+        {
+            writer.WriteLine(".text");
+            foreach(var function in program.Functions)
+            {
+                GenerateFunction(function);
+            }
+        }
+
         private void GenerateFunction(FunctionNode function)
         {
+            // No need to generate non-definitions
+            if(!function.IsDefinition) { return; }
+
             currentFunction = function;
             labelCounter = 0;
-            writer.WriteLine(".globl _{0}", function.Name);
-            writer.WriteLine("_{0}:", function.Name);
 
             localVariableMaps.Push(new LocalVariableMap());
+            // Add local variables to the map
+            int i = 0;
+            foreach(var var in function.Parameters)
+            {
+                CurrentVariableMap.AddParamInt(var, i++);
+            }
+
+            // Function label
+            writer.WriteLine(".globl {0}", GetFunctionLabel(function.Name));
+            writer.WriteLine(GetFunctionLabel(function.Name) + ":");
 
             // Function prologue, epiloge is included in return statement generation
             writer.WriteLine("push    %ebp");           // Store ebp on the stack
             writer.WriteLine("movl    %esp, %ebp");     // Use the current esp as our ebp
+                                                        // TODO: Add more prologue/epilogue depending on calling conventions?
 
-            // A function body is just a block so let GenerateStatement handle it
-            var tmpBlockNode = new BlockStatementNode(function.BodyItems);
-            GenerateStatement(tmpBlockNode);
+            // Process all block items
+            foreach(var item in function.BodyItems)
+            {
+                GenerateBlockItem(item);
+            }
 
             currentFunction = null;
         }
@@ -314,20 +342,40 @@ namespace BadCC
             }
             else if(expression is UnaryNode unaryNode)
             {
-                GenerateExpression(unaryNode.Expression);
-
                 switch(unaryNode.Op)
                 {
                     case UnaryNode.Operation.Complement:
+                        GenerateExpression(unaryNode.Expression);
                         writer.WriteLine("not     %eax");
                         break;
                     case UnaryNode.Operation.Negate:
+                        GenerateExpression(unaryNode.Expression);
                         writer.WriteLine("neg     %eax");
                         break;
                     case UnaryNode.Operation.LogicNegate:
+                        GenerateExpression(unaryNode.Expression);
                         writer.WriteLine("cmpl    $0, %eax");   // Set ZF if eax = 0
                         writer.WriteLine("movl    $0, %eax");   // Zero eax
                         writer.WriteLine("sete    %al");        // Set al (lowest byte of eax) to 1 IF ZF is set
+                        break;
+                    case UnaryNode.Operation.Address:
+                        // Store the absolute variable address in eax
+                        var name = ((VariableNode)unaryNode.Expression).Name;
+                        // TODO: Function addresses
+                        if(!CurrentVariableMap.TryGetOffset(name, out int offset))
+                        {
+                            throw new GeneratorException("Reference to undeclared variable", unaryNode);
+                        }
+
+                        // Store the value of ebp + offset in eax
+                        writer.WriteLine("movl    %ebp, %eax");         // Get EBP in EAX
+                        writer.WriteLine("addl    ${0}, %eax", offset); // Add offset to EAX, getting the absolute variable address
+
+                        break;
+                    case UnaryNode.Operation.Indirection:
+                        // Interpret eax as an address and get the value in memory at that address
+                        GenerateExpression(unaryNode.Expression);
+                        writer.WriteLine("movl    (%eax), %eax");
                         break;
                     default:
                         throw new NotImplementedException();
@@ -510,6 +558,40 @@ namespace BadCC
                 writer.WriteLine("{0}:", startOfElseLabel);             // Put in start of else label
                 GenerateExpression(conditional.FalseExpression);        // Else statement
                 writer.WriteLine("{0}:", endOfElseLabel);               // Put in end of else label last
+            }
+            else if(expression is CallNode call)
+            {
+                // Function call a(params)
+                var funcLabel = GetFunctionLabel(call.Name);
+                // Push params on stack in reverse order
+                foreach(var expr in call.Parameters.Reverse())
+                {
+                    GenerateExpression(expr);                           // Generate expression for the param
+                    writer.WriteLine("push    %eax");                   // Push param on the stack
+                }
+                writer.WriteLine("call    {0}", funcLabel);             // Call the function
+                writer.WriteLine("addl    ${0}, %esp", call.Parameters.Count * 4);  // Restore stack pointer after returning
+            }
+            else if(expression is PostfixNode postfix)
+            {
+                // a-- or a++
+                // Increment or decrement a but return the value of a before this happened
+                GenerateExpression(postfix.Variable);                       // Get the value of a
+                writer.WriteLine("push    %eax");                           // Save a on stack
+                switch(postfix.Op)
+                {
+                    case PostfixNode.Operation.Increment:
+                        writer.WriteLine("addl    $1, %eax");               // Add 1 to a
+                        break;
+                    case PostfixNode.Operation.Decrement:
+                        writer.WriteLine("subl    $1, %eax");               // Subtract 1 from a
+                        break;
+                    default:
+                        throw new NotImplementedException();
+                }
+                writer.WriteLine("movl    %eax, {0}(%ebp)",
+                    CurrentVariableMap.GetOffset(postfix.Variable.Name));   // Store a back in memory
+                writer.WriteLine("pop     %eax");                           // Return old value of a in EAX
             }
             else
             {

@@ -557,8 +557,15 @@ namespace BadCC
                 if(fixedToken.IsUnaryOp())
                 {
                     var expression = ParseFactor();
-                    return new UnaryNode(fixedToken.TokenKind, expression);
+                    var node = new UnaryNode(fixedToken.TokenKind, expression);
+                    // Check & requirement of needing an lvalue as operand
+                    if(node.Op == UnaryNode.Operation.Address && !(node.Expression is VariableNode))
+                    {
+                        throw new ParsingException("Need lvalue for & operator");
+                    }
+                    return node;
                 }
+                // ( expr )
                 else if(fixedToken.TokenKind == FixedToken.Kind.ParOpen)
                 {
                     var expression = ParseExpression();
@@ -567,6 +574,20 @@ namespace BadCC
                     {
                         return expression;
                     }
+                }
+                // Prefix increment operation (++a)
+                else if(fixedToken.TokenKind == FixedToken.Kind.Increment)
+                {
+                    // Translate into a = a + 1
+                    var idToken = TakeIdentifierToken();
+                    return new AssignmentNode(idToken.Name, new BinaryNode(FixedToken.Kind.Add, new VariableNode(idToken.Name), s_constOneNode));
+                }
+                // Prefix decrement operation (--a)
+                else if(fixedToken.TokenKind == FixedToken.Kind.Decrement)
+                {
+                    // Translate into a = a - 1
+                    var idToken = TakeIdentifierToken();
+                    return new AssignmentNode(idToken.Name, new BinaryNode(FixedToken.Kind.Negate, new VariableNode(idToken.Name), s_constOneNode));
                 }
             }
             else if(token is IdentifierToken idToken)
@@ -597,9 +618,20 @@ namespace BadCC
                     }
                     return new CallNode(idToken.Name, expressions);
                 }
-
+                // Postfix increment
+                else if(TryTakeFixedToken(FixedToken.Kind.Increment))
+                {
+                    return new PostfixNode(PostfixNode.Operation.Increment, new VariableNode(idToken.Name));
+                }
+                // Postfix decrement
+                else if(TryTakeFixedToken(FixedToken.Kind.Decrement))
+                {
+                    return new PostfixNode(PostfixNode.Operation.Decrement, new VariableNode(idToken.Name));
+                }
+                // Variable reference
                 return new VariableNode(idToken.Name);
             }
+
 
             throw new UnexpectedTokenException("Did not get a valid start of expression token", token);
         }

@@ -1,13 +1,10 @@
-﻿int fib(int n) {
-	if (n == 0 || n == 1) {
-		return n;
-	}
-	else {
-		return fib(n - 1) + fib(n - 2);
-	}
-}
-
+﻿
 int main() {
-	int n = 5;
-	return fib(n);
+	int arr_0 = 10;
+	int arr_1 = 20;
+	int arr_2 = 30;
+	int arr_3 = 40;
+	int arr_4 = 50;
+
+	return *&arr_0;
 }

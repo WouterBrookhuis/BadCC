@@ -38,9 +38,9 @@ namespace BadCC
             LessThanOrEqual,
             GreaterThan,
             GreaterThanOrEqual,
-            //BinaryOr,
-            //BinaryAnd,
-            //BinaryXor,
+            BinaryOr,
+            BinaryAnd,
+            BinaryXor,
             Assignment,
             If,
             Else,
@@ -53,11 +53,15 @@ namespace BadCC
             Continue,
             Modulo,
             Comma,
+            Increment,
+            Decrement,
         }
 
         static private readonly BiMap<Kind, string> map = new BiMap<Kind, string>()
         {
-            // TODO: Order here is VITAL for parsing correctness, make it so that it isn't...
+            // TODO: Order here is VITAL for parsing correctness, ensure everything is in the correct order
+            { Kind.Increment, "++" },
+            { Kind.Decrement, "--" },
             { Kind.ParOpen, "(" },
             { Kind.ParClose, ")" },
             { Kind.BracketOpen, "{" },
@@ -79,9 +83,6 @@ namespace BadCC
             { Kind.LogicAnd, "&&" },
             { Kind.LogicOr, "||" },
             { Kind.LogicNegate, "!" },
-            //{ Kind.BinaryOr, "|" },
-            //{ Kind.BinaryAnd, "&" },
-            //{ Kind.BinaryXor, "^" },
             { Kind.Assignment, "=" },
             { Kind.If, "if" },
             { Kind.Else, "else" },
@@ -94,6 +95,9 @@ namespace BadCC
             { Kind.Continue, "continue" },
             { Kind.Modulo, "%" },
             { Kind.Comma, "," },
+            { Kind.BinaryOr, "|" },
+            { Kind.BinaryAnd, "&" },
+            { Kind.BinaryXor, "^" },
         };
 
         public Kind TokenKind { get; private set; }
@@ -125,7 +129,9 @@ namespace BadCC
         {
             return (TokenKind == Kind.LogicNegate ||
                     TokenKind == Kind.Negate ||
-                    TokenKind == Kind.Complement);
+                    TokenKind == Kind.Complement ||
+                    TokenKind == Kind.Multiply ||       // Indirection (dereference)
+                    TokenKind == Kind.BinaryAnd);       // Address
         }
 
         public static string GetRegexPattern()
