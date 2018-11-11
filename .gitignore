@@ -262,3 +262,7 @@ __pycache__/
 *.s
 
 BadCC/out\.exe
+
+BadCC/out_bcc\.exe
+
+BadCC/out_gcc\.exe

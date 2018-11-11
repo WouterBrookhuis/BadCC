@@ -57,12 +57,30 @@ namespace BadCC
                 return map.TryGetValue(name, out offset);
             }
 
+            /// <summary>
+            /// Adds a local variable to the map. Auto generates the offset.
+            /// </summary>
+            /// <param name="name"></param>
+            /// <returns></returns>
             public int AddInt(string name)
             {
                 newlyDeclaredVars.Add(name);
                 map = map.SetItem(name, offset);
                 offset -= 4;
                 newlyDeclaredByteSize += 4;
+                return offset;
+            }
+
+            /// <summary>
+            /// Adds a function parameter to the map.
+            /// </summary>
+            /// <param name="name">Name of the parameter</param>
+            /// <param name="paramIdxFromLeft">The zero based index of the parameter, counted from the left</param>
+            /// <returns>The offset of the variable on the stack relative to ebp</returns>
+            public int AddParamInt(string name, int paramIdxFromLeft)
+            {
+                newlyDeclaredVars.Add(name);
+                map = map.SetItem(name, 8 + paramIdxFromLeft * 4);
                 return offset;
             }
         }
@@ -106,6 +124,11 @@ namespace BadCC
             return string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
         }
 
+        private string GetFunctionLabel(string functionName)
+        {
+            return string.Format("_{0}", functionName);
+        }
+
         public void GenerateProgram(ProgramNode program)
         {
             writer.WriteLine(".text");
@@ -117,20 +140,34 @@ namespace BadCC
 
         private void GenerateFunction(FunctionNode function)
         {
+            // No need to generate non-definitions
+            if(!function.IsDefinition) { return; }
+
             currentFunction = function;
             labelCounter = 0;
-            writer.WriteLine(".globl _{0}", function.Name);
-            writer.WriteLine("_{0}:", function.Name);
 
             localVariableMaps.Push(new LocalVariableMap());
+            // Add local variables to the map
+            int i = 0;
+            foreach(var var in function.Parameters)
+            {
+                CurrentVariableMap.AddParamInt(var, i++);
+            }
+
+            // Function label
+            writer.WriteLine(".globl {0}", GetFunctionLabel(function.Name));
+            writer.WriteLine(GetFunctionLabel(function.Name) + ":");
 
             // Function prologue, epiloge is included in return statement generation
             writer.WriteLine("push    %ebp");           // Store ebp on the stack
             writer.WriteLine("movl    %esp, %ebp");     // Use the current esp as our ebp
+                                                        // TODO: Add more prologue/epilogue depending on calling conventions?
 
-            // A function body is just a block so let GenerateStatement handle it
-            var tmpBlockNode = new BlockStatementNode(function.BodyItems);
-            GenerateStatement(tmpBlockNode);
+            // Process all block items
+            foreach(var item in function.BodyItems)
+            {
+                GenerateBlockItem(item);
+            }
 
             currentFunction = null;
         }
@@ -597,6 +634,19 @@ namespace BadCC
                 writer.WriteLine("{0}:", startOfElseLabel);             // Put in start of else label
                 GenerateExpression(conditional.FalseExpression);        // Else statement
                 writer.WriteLine("{0}:", endOfElseLabel);               // Put in end of else label last
+            }
+            else if(expression is CallNode call)
+            {
+                // Function call a(params)
+                var funcLabel = GetFunctionLabel(call.Name);
+                // Push params on stack in reverse order
+                foreach(var expr in call.Parameters.Reverse())
+                {
+                    GenerateExpression(expr);                           // Generate expression for the param
+                    writer.WriteLine("push    %eax");                   // Push param on the stack
+                }
+                writer.WriteLine("call    {0}", funcLabel);             // Call the function
+                writer.WriteLine("addl    ${0}, %esp", call.Parameters.Count * 4);  // Restore stack pointer after returning
             }
             else
             {
