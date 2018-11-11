@@ -418,6 +418,29 @@ namespace BadCC
         }
     }
 
+    class PostfixNode : ExpressionNode
+    {
+        public enum Operation
+        {
+            Increment, 
+            Decrement,
+        }
+
+        public Operation Op { get; private set; }
+        public VariableNode Variable { get; private set; }
+
+        public PostfixNode(Operation op, VariableNode variable)
+        {
+            Op = op;
+            Variable = variable;
+        }
+
+        public override string ToString(int indentLevel)
+        {
+            return base.ToString(indentLevel) + "\r\n" + Variable.ToString(indentLevel + 1);
+        }
+    }
+
     class VariableNode : ExpressionNode
     {
         public string Name { get; private set; }

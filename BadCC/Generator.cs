@@ -648,6 +648,27 @@ namespace BadCC
                 writer.WriteLine("call    {0}", funcLabel);             // Call the function
                 writer.WriteLine("addl    ${0}, %esp", call.Parameters.Count * 4);  // Restore stack pointer after returning
             }
+            else if(expression is PostfixNode postfix)
+            {
+                // a-- or a++
+                // Increment or decrement a but return the value of a before this happened
+                GenerateExpression(postfix.Variable);                       // Get the value of a
+                writer.WriteLine("push    %eax");                           // Save a on stack
+                switch(postfix.Op)
+                {
+                    case PostfixNode.Operation.Increment:
+                        writer.WriteLine("addl    $1, %eax");               // Add 1 to a
+                        break;
+                    case PostfixNode.Operation.Decrement:
+                        writer.WriteLine("subl    $1, %eax");               // Subtract 1 from a
+                        break;
+                    default:
+                        throw new NotImplementedException();
+                }
+                writer.WriteLine("movl    %eax, {0}(%ebp)",
+                    CurrentVariableMap.GetOffset(postfix.Variable.Name));   // Store a back in memory
+                writer.WriteLine("pop     %eax");                           // Return old value of a in EAX
+            }
             else
             {
                 throw new NotImplementedException();

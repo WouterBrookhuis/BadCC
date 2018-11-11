@@ -53,11 +53,15 @@ namespace BadCC
             Continue,
             Modulo,
             Comma,
+            Increment,
+            Decrement,
         }
 
         static private readonly BiMap<Kind, string> map = new BiMap<Kind, string>()
         {
-            // TODO: Order here is VITAL for parsing correctness, make it so that it isn't...
+            // TODO: Order here is VITAL for parsing correctness, ensure everything is in the correct order
+            { Kind.Increment, "++" },
+            { Kind.Decrement, "--" },
             { Kind.ParOpen, "(" },
             { Kind.ParClose, ")" },
             { Kind.BracketOpen, "{" },
