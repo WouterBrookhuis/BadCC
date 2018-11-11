@@ -8,111 +8,24 @@ using System.Collections.Immutable;
 
 namespace BadCC
 {
-    class Generator
+    class Generator : AbstractGenerator
     {
-        private class LocalVariableMap
+        public Generator(StreamWriter writer) : base(writer)
         {
-            private HashSet<string> newlyDeclaredVars;
-            private int newlyDeclaredByteSize;
-            private ImmutableDictionary<string, int> map;
-            private int offset;
-
-            /// <summary>
-            /// The size of this map's own new scope variables in bytes
-            /// </summary>
-            public int ScopeByteSize => newlyDeclaredByteSize;
-
-            public LocalVariableMap(LocalVariableMap template)
-            {
-                map = template.map; // We can do this since map is immutable, e.g. if we 'change it' we'll just get a copy and the original one remains the same
-                offset = template.offset;
-                newlyDeclaredVars = new HashSet<string>();  // Needs to be new
-            }
-
-            public LocalVariableMap()
-            {
-                var builder = ImmutableDictionary.CreateBuilder<string, int>();
-                map = builder.ToImmutable();
-                offset = -4;
-                newlyDeclaredVars = new HashSet<string>();
-            }
-
-            public bool ContainsVariable(string name)
-            {
-                return map.ContainsKey(name);
-            }
-
-            public bool DeclaredVariable(string name)
-            {
-                return newlyDeclaredVars.Contains(name);
-            }
-
-            public int GetOffset(string name)
-            {
-                return map[name];
-            }
-
-            public bool TryGetOffset(string name, out int offset)
-            {
-                return map.TryGetValue(name, out offset);
-            }
-
-            public int AddInt(string name)
-            {
-                newlyDeclaredVars.Add(name);
-                map = map.SetItem(name, offset);
-                offset -= 4;
-                newlyDeclaredByteSize += 4;
-                return offset;
-            }
         }
 
-        private class LoopData
+        public override void GenerateProgram(ProgramNode program)
         {
-            public string ContinueLabel { get; private set; }
-            public string BreakLabel { get; private set; }
-            /// <summary>
-            /// The map that break and continue should exit toward
-            /// </summary>
-            public LocalVariableMap LoopLevelMap { get; private set; }
-
-            public LoopData(string continueLabel, string breakLabel, LocalVariableMap loopLevelMap)
+            writer.WriteLine(".text");
+            foreach (var function in program.Functions)
             {
-                ContinueLabel = continueLabel;
-                BreakLabel = breakLabel;
-                LoopLevelMap = loopLevelMap;
+                GenerateFunction(function);
             }
-        }
-
-        private LocalVariableMap CurrentVariableMap => localVariableMaps.Peek();
-        private LoopData CurrentLoopData => loopDatas.Peek();
-
-        private StreamWriter writer;
-        private Stack<LocalVariableMap> localVariableMaps;
-        private Stack<LoopData> loopDatas;
-
-        private int labelCounter;
-        private FunctionNode currentFunction;
-
-        public Generator(StreamWriter writer)
-        {
-            this.writer = writer;
-            localVariableMaps = new Stack<LocalVariableMap>();
-            loopDatas = new Stack<LoopData>();
         }
 
         private string GetUniqueLabel()
         {
             return string.Format("_{0}_{1}", currentFunction.Name, labelCounter++);
-        }
-
-        public void GenerateProgram(ProgramNode program)
-        {
-            writer.WriteLine(".text");
-            foreach(var function in program.Functions)
-            {
-                GenerateFunction(function);
-            }
         }
 
         private void GenerateFunction(FunctionNode function)

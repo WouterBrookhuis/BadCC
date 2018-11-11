@@ -1,0 +1,88 @@
+
+[ a ] optional a
+{ a } optional a, repeating
+
+program = { function_definition | function_declaration }
+
+#TODO Actual types and stuff
+function_declaration = declaration_specifiers declarator "(" [ INT ID { "," INT ID }] ")" ";"
+
+function_definition = declaration_specifiers declarator "(" [ INT ID { "," INT ID }] ")" compound_statement
+
+compound_statement = "{" { block_item } "}"
+
+block_item = declaration | statement
+#TODO: Figure this out...
+declaration = declaration_specifiers ";" | declaration_specifiers init_declarator_list ";"
+
+init_declarator_list = init_declarator { "," init_declarator }
+
+init_declarator = declarator [ "=" initializer ]
+
+initializer = assignment_expr
+
+# Basically a bunch of type specifiers behind eachother
+declaration_specifiers = type_specifier [ declaration_specifiers ] = type_specifier { type_specifier }
+
+declarator = [ pointer ] direct_declarator
+
+pointer = "*" [ pointer ]
+
+direct_declarator = ID
+ | "(" declarator ")"
+ | direct_declarator "(" [ parameter_list ] ")"
+ 
+ type_specifier = INT | VOID
+ 
+ parameter_list = parameter_declaration { "," parameter_declaration }
+ 
+ parameter_declaration = declaration_specifiers declarator
+
+
+# STATEMENTS
+
+statement = compound_statement | expression_statement | jump_statement
+
+expression_statement = ";" | expression ";"
+
+jump_statement = CONTINUE ";" | BREAK ";" | RETURN ";" | RETURN expression ";"
+
+selection_statement = IF "(" expression ")" statement [ ELSE statement ]
+
+iteration_statement = WHILE "(" expression ")" statement
+| DO statement WHILE "(" expression ")" ";"
+| FOR "(" declaration expression_statement [ expression ] ")" statement
+| FOR "(" expression_statement expression_statement [ expression ] ")" statement
+
+
+# EXPRESSIONS
+
+expression = assignment_expr | conditional_expr
+
+assignment_expr = mutable "=" expression
+
+conditional_expr = logic_or_expr [ "?" expression ":" conditional_expr ]
+
+logic_or_expr = logic_and_expr { "||" logic_and_expr }
+
+logic_and_expr = equality_expr { "&&" equality_expr }
+
+equality_expr = relational_expr { ("==" | "!=") relational_expr }
+
+relational_expr = additive_expr { ("<" | ">" | "<=" | ">=") additive_expr }
+
+additive_expr = term { ("+" | "-") term }
+
+term = factor { ("*" | "/" | "%") factor } 
+
+factor = immutable | mutable
+
+immutable =  func_call | "(" expression ")" | unary_op | constant
+
+func_call = ID "(" [ expression { "," expression }] ")"
+
+constant = INT_LITERAL
+
+unary_op = "~" factor | "!" factor | "-" factor 
+
+mutable = ID | ID "[" expression "]"
