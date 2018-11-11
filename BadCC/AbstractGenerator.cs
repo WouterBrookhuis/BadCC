@@ -65,6 +65,13 @@ namespace BadCC
                 newlyDeclaredByteSize += 4;
                 return offset;
             }
+
+            public int AddParamInt(string name, int paramIdxFromLeft)
+            {
+                newlyDeclaredVars.Add(name);
+                map = map.SetItem(name, 8 + paramIdxFromLeft * 4);
+                return offset;
+            }
         }
 
         protected class LoopData

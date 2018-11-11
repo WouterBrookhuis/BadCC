@@ -33,15 +33,6 @@ namespace BadCC
             return string.Format("_{0}", functionName);
         }
 
-        public void GenerateProgram(ProgramNode program)
-        {
-            writer.WriteLine(".text");
-            foreach(var function in program.Functions)
-            {
-                GenerateFunction(function);
-            }
-        }
-
         private void GenerateFunction(FunctionNode function)
         {
             // No need to generate non-definitions
