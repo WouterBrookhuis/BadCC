@@ -64,6 +64,22 @@ namespace BadCC
         }
 
         /// <summary>
+        /// Peeks the next token in the queue and checks if it's a fixed token of the given kind.
+        /// </summary>
+        /// <param name="tokens"></param>
+        /// <param name="kind"></param>
+        /// <returns></returns>
+        private bool PeekFixedToken(FixedToken.Kind kind, int index)
+        {
+            var typeToken = tokens.ElementAt(index) as FixedToken;
+            if(typeToken == null || typeToken.TokenKind != kind)
+            {
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Takes an identifier token from the queue, throws exception if it can't.
         /// </summary>
         /// <returns>IdentifierToken that was dequeued</returns>
@@ -203,8 +219,35 @@ namespace BadCC
             // Integer variable declaration
             if(TryTakeFixedToken(FixedToken.Kind.Int))
             {
+                // Pointer shenanigans
+                var baseTypeInfo = TypeInfo.Int;
+                while(TryTakeFixedToken(FixedToken.Kind.Multiply))
+                {
+                    baseTypeInfo = new TypeInfo(baseTypeInfo, true);
+                }
+
                 // Name of the variable
                 var idToken = TakeIdentifierToken();
+
+                // Optional array indicator [ X ], X is some expression
+                ExpressionNode arraySizeExpression = null;
+                if(TryTakeFixedToken(FixedToken.Kind.SqrBracketOpen))
+                {
+                    arraySizeExpression = ParseExpression();
+                    TakeFixedToken(FixedToken.Kind.SqrBracketClose);
+
+                    // TODO: Support variable length arrays
+                    if(!(arraySizeExpression is ConstantNode))
+                    {
+                        throw new ParsingException("Expected constant expression for size of array " + idToken.Name);
+                    }
+
+                    // Catch known illegal sizes
+                    if(arraySizeExpression is ConstantNode constant && constant.Value < 0)
+                    {
+                        throw new ParsingException("Size of array declaration " + idToken.Name + " is negative");
+                    }
+                }
 
                 // Check for assignment (=) to see if there is an expression here
                 ExpressionNode expression = null;
@@ -222,7 +265,10 @@ namespace BadCC
                 // Semi colon
                 TakeFixedToken(FixedToken.Kind.SemiColon);
 
-                return new DeclareNode(idToken.Name, expression);
+                // Generate the type for this declaration, either the base type or an array containing the base type
+                var typeInfo = arraySizeExpression != null ? new TypeInfo(baseTypeInfo, false) : baseTypeInfo;
+
+                return new DeclareNode(new VariableInfo(idToken.Name, typeInfo), expression, arraySizeExpression);
             }
             throw new UnexpectedTokenException("Expected int token", tokens.Peek());
         }
@@ -384,28 +430,19 @@ namespace BadCC
 
         private ExpressionNode ParseExpression()
         {
-            // Assignment or variable expression
-            if(tokens.Peek() is IdentifierToken idToken)
+            var expression = ParseConditionalExpression();
+
+            // It's a variable node, so check for assignment
+            if(expression is VariableNode variableNode)
             {
-                // = token?
-                var token = tokens.ElementAt(1);
-                if(token is FixedToken equalsToken && equalsToken.TokenKind == FixedToken.Kind.Assignment)
+                if(TryTakeFixedToken(FixedToken.Kind.Assignment))
                 {
-                    // Assignment expression, remove both tokens
-                    tokens.Dequeue();
-                    tokens.Dequeue();
-
-                    // Expression
-                    var expression = ParseExpression();
-
-                    return new AssignmentNode(idToken.Name, expression);
+                    var assign = ParseExpression();
+                    return new AssignmentNode(variableNode, assign);
                 }
-
-                // Variable expression probably, fall trough
             }
 
-            // Conditional expression
-            return ParseConditionalExpression();
+            return expression;
         }
 
         private ExpressionNode ParseConditionalExpression()
@@ -579,15 +616,15 @@ namespace BadCC
                 else if(fixedToken.TokenKind == FixedToken.Kind.Increment)
                 {
                     // Translate into a = a + 1
-                    var idToken = TakeIdentifierToken();
-                    return new AssignmentNode(idToken.Name, new BinaryNode(FixedToken.Kind.Add, new VariableNode(idToken.Name), s_constOneNode));
+                    var variableNode = ParseVariableNode(null);
+                    return new AssignmentNode(variableNode, new BinaryNode(FixedToken.Kind.Add, variableNode, s_constOneNode));
                 }
                 // Prefix decrement operation (--a)
                 else if(fixedToken.TokenKind == FixedToken.Kind.Decrement)
                 {
                     // Translate into a = a - 1
-                    var idToken = TakeIdentifierToken();
-                    return new AssignmentNode(idToken.Name, new BinaryNode(FixedToken.Kind.Negate, new VariableNode(idToken.Name), s_constOneNode));
+                    var variableNode = ParseVariableNode(null);
+                    return new AssignmentNode(variableNode, new BinaryNode(FixedToken.Kind.Negate, variableNode, s_constOneNode));
                 }
             }
             else if(token is IdentifierToken idToken)
@@ -618,22 +655,44 @@ namespace BadCC
                     }
                     return new CallNode(idToken.Name, expressions);
                 }
+
+                // It's some sort of variable
+                var variable = ParseVariableNode(idToken);
+
                 // Postfix increment
-                else if(TryTakeFixedToken(FixedToken.Kind.Increment))
+                if(TryTakeFixedToken(FixedToken.Kind.Increment))
                 {
-                    return new PostfixNode(PostfixNode.Operation.Increment, new VariableNode(idToken.Name));
+                    return new PostfixNode(PostfixNode.Operation.Increment, variable);
                 }
                 // Postfix decrement
                 else if(TryTakeFixedToken(FixedToken.Kind.Decrement))
                 {
-                    return new PostfixNode(PostfixNode.Operation.Decrement, new VariableNode(idToken.Name));
+                    return new PostfixNode(PostfixNode.Operation.Decrement, variable);
                 }
                 // Variable reference
-                return new VariableNode(idToken.Name);
+                return variable;
             }
 
 
             throw new UnexpectedTokenException("Did not get a valid start of expression token", token);
+        }
+
+        private VariableNode ParseVariableNode(IdentifierToken idToken)
+        {
+            // id [ expr ]
+            if(idToken == null)
+            {
+                idToken = TakeIdentifierToken();
+            }
+
+            ExpressionNode indexExpression = null;
+            if(TryTakeFixedToken(FixedToken.Kind.SqrBracketOpen))
+            {
+                indexExpression = ParseExpression();
+                TakeFixedToken(FixedToken.Kind.SqrBracketClose);
+            }
+
+            return new VariableNode(idToken.Name, indexExpression);
         }
     }
 }

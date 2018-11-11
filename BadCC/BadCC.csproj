@@ -56,6 +56,7 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Token.cs" />
     <Compile Include="UnexpectedTokenException.cs" />
+    <Compile Include="VariableInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

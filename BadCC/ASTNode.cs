@@ -103,13 +103,23 @@ namespace BadCC
 
     class DeclareNode : BlockItemNode
     {
-        public string Name { get; private set; }
+        public VariableInfo Info { get; private set; }
         public ExpressionNode Expression { get; private set; }
+        public ExpressionNode ArraySizeExpression { get; private set; }
 
-        public DeclareNode(string name, ExpressionNode expression)
+        public DeclareNode(VariableInfo info, ExpressionNode expression)
         {
-            Name = name;
+            Info = info;
             Expression = expression;
+        }
+
+        public DeclareNode(VariableInfo info, ExpressionNode expression, ExpressionNode arraySizeExpression) : this(info, expression)
+        {
+            if(!info.Type.IsArray && arraySizeExpression != null)
+            {
+                throw new Exception("Should not have an array size expression given for non array type!");
+            }
+            ArraySizeExpression = arraySizeExpression;
         }
 
         public override string ToString(int indentLevel)
@@ -278,18 +288,18 @@ namespace BadCC
 
     class AssignmentNode : ExpressionNode
     {
-        public string Name { get; private set; }
+        public VariableNode Variable { get; private set; }
         public ExpressionNode Expression { get; private set; }
 
-        public AssignmentNode(string name, ExpressionNode expression)
+        public AssignmentNode(VariableNode variable, ExpressionNode expression)
         {
-            Name = name;
+            Variable = variable;
             Expression = expression;
         }
 
         public override string ToString(int indentLevel)
         {
-            return base.ToString(indentLevel) + "\r\n" + Expression.ToString(indentLevel + 1);
+            return base.ToString(indentLevel) + "\r\n" + Variable.ToString(indentLevel + 1) + "\r\n" + Expression.ToString(indentLevel + 1);
         }
     }
 
@@ -450,10 +460,13 @@ namespace BadCC
     class VariableNode : ExpressionNode
     {
         public string Name { get; private set; }
+        public ExpressionNode ArrayIndexExpression { get; private set; }
+        public bool UseArrayIndexer => ArrayIndexExpression != null;
 
-        public VariableNode(string name)
+        public VariableNode(string name, ExpressionNode arrayIndexExpression)
         {
             Name = name;
+            ArrayIndexExpression = arrayIndexExpression;
         }
     }
 

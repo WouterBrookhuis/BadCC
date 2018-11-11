@@ -71,6 +71,15 @@ namespace BadCC
                 return offset;
             }
 
+            public int AddIntArray(string name, int size)
+            {
+                newlyDeclaredVars.Add(name);
+                map = map.SetItem(name, offset);
+                offset -= 4 * size;
+                newlyDeclaredByteSize += 4 * size;
+                return offset;
+            }
+
             /// <summary>
             /// Adds a function parameter to the map.
             /// </summary>
@@ -177,21 +186,32 @@ namespace BadCC
             if(blockItem is DeclareNode declareNode)
             {
                 // Variable declaration
-                if(CurrentVariableMap.DeclaredVariable(declareNode.Name))
+                if(CurrentVariableMap.DeclaredVariable(declareNode.Info.Name))
                 {
                     throw new GeneratorException("Duplicate variable declaration!", blockItem);
                 }
 
-                // Execute the expression or use default initializer
-                if(declareNode.Expression != null)
+                if(declareNode.Info.Type.IsArray)
                 {
-                    GenerateExpression(declareNode.Expression);
+                    var size = ((ConstantNode)declareNode.ArraySizeExpression).Value;
+                    // Write crap to stack
+                    for(int i = 0; i < size; i++)
+                    {
+                        // TODO: Better default initializer?
+                        writer.WriteLine("push    ${0}", i);
+                    }
+                    CurrentVariableMap.AddIntArray(declareNode.Info.Name, size);
                 }
-                // Save initial value on stack
-                writer.WriteLine("push    %eax");
+                else
+                {
+                    // Execute the expression
+                    GenerateExpression(declareNode.Expression);
+                    // Save initial value on stack
+                    writer.WriteLine("push    %eax");
 
-                // Keep track of where it is
-                CurrentVariableMap.AddInt(declareNode.Name);
+                    // Keep track of where it is
+                    CurrentVariableMap.AddInt(declareNode.Info.Name);
+                }
             }
             else if(blockItem is StatementNode statement)
             {
@@ -616,10 +636,24 @@ namespace BadCC
             else if(expression is AssignmentNode assignmentNode)
             {
                 // Variable assignment
-                if(CurrentVariableMap.TryGetOffset(assignmentNode.Name, out int variableOffset))
+                if(CurrentVariableMap.TryGetOffset(assignmentNode.Variable.Name, out int variableOffset))
                 {
                     GenerateExpression(assignmentNode.Expression);
-                    writer.WriteLine("movl    %eax, {0}(%ebp)", variableOffset);    // Store eax in memory at ebp + variableOffset
+                    // If the array indexer is used we need to generate the expression as well
+                    if(assignmentNode.Variable.UseArrayIndexer)
+                    {
+                        writer.WriteLine("push    %eax");                                       // Push assigned value on stack
+                        GenerateExpression(assignmentNode.Variable.ArrayIndexExpression);       // Index expression
+                        writer.WriteLine("neg     %eax");                                       // Negate the expression result since higher indexes are at lower addresses
+                        writer.WriteLine("pop     %ecx");                                       // Pop assigned value into ecx
+                        writer.WriteLine("movl    %ecx, {0}(%ebp, %eax, 4)", variableOffset);   // Store ecx in memory at ebp + variableOffset + eax * 4
+                        writer.WriteLine("movl    %ecx, %eax");                                 // Store assigned value in eax, so it can be used in other expressions
+                    }
+                    else
+                    {
+                        writer.WriteLine("movl    %eax, {0}(%ebp)", variableOffset);    // Store eax in memory at ebp + variableOffset
+                    }
+                    
                 }
                 else
                 {
@@ -631,7 +665,17 @@ namespace BadCC
                 // Reference to a variable
                 if(CurrentVariableMap.TryGetOffset(variableNode.Name, out int variableOffset))
                 {
-                    writer.WriteLine("movl    {0}(%ebp), %eax", variableOffset);    // eax = mem(ebp + variableOffset)
+                    // If the array indexer is used we need to generate the expression as well
+                    if(variableNode.UseArrayIndexer)
+                    {
+                        GenerateExpression(variableNode.ArrayIndexExpression);              // Index expression
+                        writer.WriteLine("neg     %eax");                                   // Negate the expression result since higher indexes are at lower addresses
+                        writer.WriteLine("movl    {0}(%ebp, %eax, 4), %eax", variableOffset);  // eax = mem(ebp + variableOffset + eax * 4)
+                    }
+                    else
+                    {
+                        writer.WriteLine("movl    {0}(%ebp), %eax", variableOffset);        // eax = mem(ebp + variableOffset)
+                    }
                 }
                 else
                 {

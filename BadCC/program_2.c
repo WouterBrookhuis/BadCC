@@ -1,10 +1,6 @@
-﻿
-int main() {
-	int arr_0 = 10;
-	int arr_1 = 20;
-	int arr_2 = 30;
-	int arr_3 = 40;
-	int arr_4 = 50;
-
-	return *&arr_0;
+﻿int main() {
+	int a[10][20];
+	a[3] = 9;
+	int b = ++a[3];
+	return b;
 }
