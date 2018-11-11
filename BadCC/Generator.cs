@@ -438,20 +438,40 @@ namespace BadCC
             }
             else if(expression is UnaryNode unaryNode)
             {
-                GenerateExpression(unaryNode.Expression);
-
                 switch(unaryNode.Op)
                 {
                     case UnaryNode.Operation.Complement:
+                        GenerateExpression(unaryNode.Expression);
                         writer.WriteLine("not     %eax");
                         break;
                     case UnaryNode.Operation.Negate:
+                        GenerateExpression(unaryNode.Expression);
                         writer.WriteLine("neg     %eax");
                         break;
                     case UnaryNode.Operation.LogicNegate:
+                        GenerateExpression(unaryNode.Expression);
                         writer.WriteLine("cmpl    $0, %eax");   // Set ZF if eax = 0
                         writer.WriteLine("movl    $0, %eax");   // Zero eax
                         writer.WriteLine("sete    %al");        // Set al (lowest byte of eax) to 1 IF ZF is set
+                        break;
+                    case UnaryNode.Operation.Address:
+                        // Store the absolute variable address in eax
+                        var name = ((VariableNode)unaryNode.Expression).Name;
+                        // TODO: Function addresses
+                        if(!CurrentVariableMap.TryGetOffset(name, out int offset))
+                        {
+                            throw new GeneratorException("Reference to undeclared variable", unaryNode);
+                        }
+
+                        // Store the value of ebp + offset in eax
+                        writer.WriteLine("movl    %ebp, %eax");         // Get EBP in EAX
+                        writer.WriteLine("addl    ${0}, %eax", offset); // Add offset to EAX, getting the absolute variable address
+
+                        break;
+                    case UnaryNode.Operation.Indirection:
+                        // Interpret eax as an address and get the value in memory at that address
+                        GenerateExpression(unaryNode.Expression);
+                        writer.WriteLine("movl    (%eax), %eax");
                         break;
                     default:
                         throw new NotImplementedException();

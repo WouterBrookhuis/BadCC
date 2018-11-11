@@ -385,6 +385,8 @@ namespace BadCC
             Negate,
             Complement,
             LogicNegate,
+            Indirection,
+            Address,
         }
 
         public Operation Op { get; private set; }
@@ -400,6 +402,10 @@ namespace BadCC
                     Op = Operation.Complement; break;
                 case FixedToken.Kind.LogicNegate:
                     Op = Operation.LogicNegate; break;
+                case FixedToken.Kind.Multiply:
+                    Op = Operation.Indirection; break;
+                case FixedToken.Kind.BinaryAnd:
+                    Op = Operation.Address; break;
                 default:
                     throw new ArgumentException("Token kind is not one for Unary operators!");
             }

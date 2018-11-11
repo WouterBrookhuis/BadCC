@@ -38,9 +38,9 @@ namespace BadCC
             LessThanOrEqual,
             GreaterThan,
             GreaterThanOrEqual,
-            //BinaryOr,
-            //BinaryAnd,
-            //BinaryXor,
+            BinaryOr,
+            BinaryAnd,
+            BinaryXor,
             Assignment,
             If,
             Else,
@@ -83,9 +83,6 @@ namespace BadCC
             { Kind.LogicAnd, "&&" },
             { Kind.LogicOr, "||" },
             { Kind.LogicNegate, "!" },
-            //{ Kind.BinaryOr, "|" },
-            //{ Kind.BinaryAnd, "&" },
-            //{ Kind.BinaryXor, "^" },
             { Kind.Assignment, "=" },
             { Kind.If, "if" },
             { Kind.Else, "else" },
@@ -98,6 +95,9 @@ namespace BadCC
             { Kind.Continue, "continue" },
             { Kind.Modulo, "%" },
             { Kind.Comma, "," },
+            { Kind.BinaryOr, "|" },
+            { Kind.BinaryAnd, "&" },
+            { Kind.BinaryXor, "^" },
         };
 
         public Kind TokenKind { get; private set; }
@@ -129,7 +129,9 @@ namespace BadCC
         {
             return (TokenKind == Kind.LogicNegate ||
                     TokenKind == Kind.Negate ||
-                    TokenKind == Kind.Complement);
+                    TokenKind == Kind.Complement ||
+                    TokenKind == Kind.Multiply ||       // Indirection (dereference)
+                    TokenKind == Kind.BinaryAnd);       // Address
         }
 
         public static string GetRegexPattern()

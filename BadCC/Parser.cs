@@ -557,8 +557,15 @@ namespace BadCC
                 if(fixedToken.IsUnaryOp())
                 {
                     var expression = ParseFactor();
-                    return new UnaryNode(fixedToken.TokenKind, expression);
+                    var node = new UnaryNode(fixedToken.TokenKind, expression);
+                    // Check & requirement of needing an lvalue as operand
+                    if(node.Op == UnaryNode.Operation.Address && !(node.Expression is VariableNode))
+                    {
+                        throw new ParsingException("Need lvalue for & operator");
+                    }
+                    return node;
                 }
+                // ( expr )
                 else if(fixedToken.TokenKind == FixedToken.Kind.ParOpen)
                 {
                     var expression = ParseExpression();
